@@ -1,3 +1,34 @@
 # French interest words – difficile (hard) difficulty
 # Filename suffix 'd' stands for 'difficile' (French for hard)
 # One word per line
+# These are more abstract or less common French words used as target words in hard mode.
+ambiguïté
+bienveillance
+clandestinité
+contemplation
+crépuscule
+désinvolture
+éphémère
+équivoque
+errance
+frontière
+idéologie
+immuable
+impermanence
+incertitude
+intrépide
+labyrinthique
+mélancolie
+nostalgie
+obscurité
+paradigme
+perpétuel
+précaire
+préméditation
+quiétude
+résilience
+sérénité
+solitude
+subtilité
+transcendance
+vertige

@@ -44,6 +44,20 @@ Players guess a secret word by submitting words in chat. The bot uses word embed
    This will download the required Gensim word2vec model into the `models/` directory
    (which is not versioned).
 
+## Word Lists
+
+The `data/` directory contains the curated French words that the bot can pick as the
+secret target word for each game round.
+
+| File                     | Difficulty | Description |
+|--------------------------|------------|-------------|
+| `interest_words_f.txt`   | Facile (easy)      | Common, concrete everyday nouns |
+| `interest_words_d.txt`   | Difficile (hard)   | Abstract or less frequent words |
+
+Each file uses one word per line. Lines starting with `#` are treated as comments and
+are ignored by the word loader. You can add, remove, or replace words freely — just keep
+one word per line and ensure every word is present in your word2vec model vocabulary.
+
 ## Running
 
 ```bash
@@ -60,7 +74,9 @@ streamantix/
 ├── game/              # Game logic
 │   ├── engine.py      # Game state and scoring
 │   └── word_utils.py  # Word loading and processing utilities
-├── data/              # Word lists (versioned)
+├── data/              # Curated French word lists used as target words
+│   ├── interest_words_f.txt  # Easy (facile) word list
+│   └── interest_words_d.txt  # Hard (difficile) word list
 ├── models/            # Word embedding models (not versioned)
 ├── tests/             # Test suite
 ├── config.py          # Configuration loaded from environment
