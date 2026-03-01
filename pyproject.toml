@@ -1,0 +1,22 @@
+[tool.poetry]
+name = "streamantix"
+version = "0.1.0"
+description = "Twitch chat bot for a Cemantix-like semantic word guessing game"
+authors = ["Solution Libre <contact@solution-libre.fr>"]
+readme = "README.md"
+license = "AGPL-3.0-or-later"
+
+[tool.poetry.dependencies]
+python = ">=3.12"
+twitchio = "^2.10"
+gensim = "^4.3"
+python-dotenv = "^1.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.0"
+pytest-asyncio = "^0.23"
+pytest-cov = "^5.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

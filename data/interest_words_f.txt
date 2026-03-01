@@ -1,0 +1,44 @@
+# French interest words – facile (easy) difficulty
+# Filename suffix 'f' stands for 'facile' (French for easy)
+# One word per line
+# These are common, everyday French nouns used as target words in easy mode.
+arbre
+bateau
+bougie
+carte
+chat
+cheval
+chien
+ciel
+coeur
+cuisine
+eau
+enfant
+fleur
+forêt
+fruit
+jardin
+jeu
+lettre
+lumière
+maison
+mer
+montagne
+nuit
+oiseau
+pain
+pluie
+poisson
+porte
+rivière
+route
+soleil
+table
+train
+valise
+vent
+verre
+vêtement
+village
+ville
+voiture

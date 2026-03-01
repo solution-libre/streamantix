@@ -1,2 +1,89 @@
 # streamantix
-Twitch chat bot to play a Cemantix-like semantic word guessing game
+
+Twitch chat bot to play a Cemantix-like semantic word guessing game.
+
+Players guess a secret word by submitting words in chat. The bot uses word embeddings
+(via Gensim) to score each guess based on its semantic similarity to the target word.
+
+## Requirements
+
+- Python 3.12+
+- [Poetry](https://python-poetry.org/) for dependency management
+- A Twitch account with an OAuth token
+
+## Setup
+
+1. **Install dependencies**
+
+   ```bash
+   poetry install
+   ```
+
+2. **Configure environment variables**
+
+   Copy the example environment file and fill in your values:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   | Variable         | Description                              | Default |
+   |------------------|------------------------------------------|---------|
+   | `TWITCH_TOKEN`   | Twitch OAuth token (`oauth:...`)         | —       |
+   | `TWITCH_CHANNEL` | Twitch channel name to join              | —       |
+   | `COMMAND_PREFIX` | Prefix for bot commands                  | `!sx`   |
+   | `COOLDOWN`       | Cooldown between guesses (seconds)       | `5`     |
+   | `DIFFICULTY`     | Game difficulty (`easy`=facile, `hard`=difficile) | `easy` |
+
+3. **Download the word embedding model**
+
+   ```bash
+   poetry run python download_model.py
+   ```
+
+   This will download the required Gensim word2vec model into the `models/` directory
+   (which is not versioned).
+
+## Word Lists
+
+The `data/` directory contains the curated French words that the bot can pick as the
+secret target word for each game round.
+
+| File                     | Difficulty | Description |
+|--------------------------|------------|-------------|
+| `interest_words_f.txt`   | Facile (easy)      | Common, concrete everyday nouns |
+| `interest_words_d.txt`   | Difficile (hard)   | Abstract or less frequent words |
+
+Each file uses one word per line. Lines starting with `#` are treated as comments and
+are ignored by the word loader. You can add, remove, or replace words freely — just keep
+one word per line and ensure every word is present in your word2vec model vocabulary.
+
+## Running
+
+```bash
+poetry run python main.py
+```
+
+## Project Structure
+
+```
+streamantix/
+├── bot/               # Twitch bot integration
+│   ├── bot.py         # Bot definition and commands
+│   └── cooldown.py    # Per-user cooldown logic
+├── game/              # Game logic
+│   ├── engine.py      # Game state and scoring
+│   └── word_utils.py  # Word loading and processing utilities
+├── data/              # Curated French word lists used as target words
+│   ├── interest_words_f.txt  # Easy (facile) word list
+│   └── interest_words_d.txt  # Hard (difficile) word list
+├── models/            # Word embedding models (not versioned)
+├── tests/             # Test suite
+├── config.py          # Configuration loaded from environment
+├── download_model.py  # Helper to download the embedding model
+└── main.py            # Entry point
+```
+
+## License
+
+AGPL-3.0-or-later
