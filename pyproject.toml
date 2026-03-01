@@ -5,6 +5,7 @@ description = "Twitch chat bot for a Cemantix-like semantic word guessing game"
 authors = ["Solution Libre <contact@solution-libre.fr>"]
 readme = "README.md"
 license = "AGPL-3.0-or-later"
+package-mode = false
 
 [tool.poetry.dependencies]
 python = ">=3.12"
