@@ -1,0 +1,3 @@
+# French interest words – facile (easy) difficulty
+# Filename suffix 'f' stands for 'facile' (French for easy)
+# One word per line

@@ -1,0 +1,3 @@
+# French interest words – difficile (hard) difficulty
+# Filename suffix 'd' stands for 'difficile' (French for hard)
+# One word per line
