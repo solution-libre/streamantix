@@ -58,6 +58,20 @@ Each file uses one word per line. Lines starting with `#` are treated as comment
 are ignored by the word loader. You can add, remove, or replace words freely — just keep
 one word per line and ensure every word is present in your word2vec model vocabulary.
 
+## Testing
+
+Run the full test suite:
+
+```bash
+poetry run pytest
+```
+
+Run with coverage report:
+
+```bash
+poetry run pytest --cov
+```
+
 ## Running
 
 ```bash
