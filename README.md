@@ -76,6 +76,29 @@ Each file uses one word per line. Lines starting with `#` are treated as comment
 are ignored by the word loader. You can add, remove, or replace words freely — just keep
 one word per line and ensure every word is present in your word2vec model vocabulary.
 
+## Commands
+
+All commands are prefixed with the configured `COMMAND_PREFIX` (default: `!sx`).
+
+| Command | Who can use | Description |
+|---------|-------------|-------------|
+| `!sx help` | Anyone | Show available commands |
+| `!sx start [easy|medium|hard]` | Broadcaster only | Start a new game round. Defaults to `easy` if no difficulty given |
+| `!sx guess <word>` | Anyone | Submit a guess for the current game |
+| `!sx setprefix <prefix>` | Mod / Broadcaster | Change the command prefix (session only) |
+| `!sx setcooldown <seconds>` | Mod / Broadcaster | Change the guess cooldown duration (session only) |
+
+### Examples
+
+```
+!sx help
+!sx start
+!sx start hard
+!sx guess maison
+!sx setprefix ?sx
+!sx setcooldown 10
+```
+
 ## Testing
 
 Run the full test suite:
