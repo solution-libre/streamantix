@@ -1,46 +1,155 @@
-"""Skeleton tests for game.engine (GameEngine)."""
+"""Tests for game.engine (SemanticEngine and GameEngine)."""
 
+import numpy as np
 import pytest
+from gensim.models import KeyedVectors
 
-from game.engine import GameEngine
+from game.engine import GameEngine, SemanticEngine
 
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_engine() -> SemanticEngine:
+    """Return a SemanticEngine backed by a small in-memory KeyedVectors."""
+    kv = KeyedVectors(vector_size=4)
+    words = ["chat", "chien", "maison", "voiture"]
+    # Use predictable vectors: chat/chien are close, maison/voiture are close,
+    # the two pairs are far apart.
+    vectors = np.array(
+        [
+            [1.0, 0.0, 0.0, 0.0],  # chat
+            [0.9, 0.1, 0.0, 0.0],  # chien  (close to chat)
+            [0.0, 0.0, 1.0, 0.0],  # maison (unrelated to chat)
+            [0.0, 0.0, 0.9, 0.1],  # voiture (close to maison)
+        ],
+        dtype=np.float32,
+    )
+    kv.add_vectors(words, vectors)
+
+    engine = SemanticEngine.__new__(SemanticEngine)
+    engine._model_path = "<in-memory>"
+    engine._model = kv
+    engine._cleaned_key_map = {w: w for w in words}
+    return engine
+
+
+# ---------------------------------------------------------------------------
+# SemanticEngine – loading
+# ---------------------------------------------------------------------------
+
+class TestSemanticEngineLoading:
+    def test_not_loaded_before_load(self):
+        engine = SemanticEngine(model_path="/nonexistent/path.bin")
+        assert not engine.is_loaded
+
+    def test_is_loaded_after_injecting_model(self):
+        engine = _make_engine()
+        assert engine.is_loaded
+
+    def test_score_guess_raises_when_not_loaded(self):
+        engine = SemanticEngine(model_path="/nonexistent/path.bin")
+        with pytest.raises(RuntimeError, match="not loaded"):
+            engine.similarity("chat", "chien")
+
+
+# ---------------------------------------------------------------------------
+# SemanticEngine – similarity
+# ---------------------------------------------------------------------------
+
+class TestSemanticEngineSimilarity:
+    def test_exact_match_returns_one(self):
+        engine = _make_engine()
+        assert engine.score_guess("chat", "chat") == 1.0
+
+    def test_similar_words_return_high_score(self):
+        engine = _make_engine()
+        score = engine.score_guess("chien", "chat")
+        assert score is not None
+        assert score > 0.5
+
+    def test_unrelated_words_return_low_score(self):
+        engine = _make_engine()
+        score = engine.score_guess("maison", "chat")
+        assert score is not None
+        assert score < 0.5
+
+    def test_score_is_between_zero_and_one(self):
+        engine = _make_engine()
+        for guess in ["chat", "chien", "maison", "voiture"]:
+            score = engine.score_guess(guess, "chat")
+            assert score is not None
+            assert 0.0 <= score <= 1.0
+
+    def test_unknown_word_returns_none(self):
+        engine = _make_engine()
+        assert engine.score_guess("inconnu", "chat") is None
+
+    def test_similarity_is_symmetric(self):
+        engine = _make_engine()
+        assert engine.similarity("chat", "chien") == pytest.approx(
+            engine.similarity("chien", "chat"), abs=1e-6
+        )
+
+
+# ---------------------------------------------------------------------------
+# GameEngine – initialisation
+# ---------------------------------------------------------------------------
 
 class TestGameEngineInit:
-    @pytest.mark.skip(reason="not implemented")
     def test_target_word_stored(self):
-        """GameEngine should store the target word on initialization."""
-        assert False, "not implemented"
+        ge = GameEngine("chat")
+        assert ge.target_word == "chat"
 
-    @pytest.mark.skip(reason="not implemented")
     def test_initial_guesses_empty(self):
-        """GameEngine should start with no recorded guesses."""
-        assert False, "not implemented"
+        ge = GameEngine("chat")
+        assert ge._guesses == {}
 
+
+# ---------------------------------------------------------------------------
+# GameEngine – score_guess
+# ---------------------------------------------------------------------------
 
 class TestScoreGuess:
-    @pytest.mark.skip(reason="semantic scoring not implemented")
     def test_exact_match_returns_one(self):
-        """An exact match should return a score of 1.0."""
-        assert False, "not implemented"
+        ge = GameEngine("chat", semantic_engine=_make_engine())
+        assert ge.score_guess("chat") == 1.0
 
-    @pytest.mark.skip(reason="semantic scoring not implemented")
     def test_unrelated_word_returns_low_score(self):
-        """An unrelated word should return a score close to 0."""
-        assert False, "not implemented"
+        ge = GameEngine("chat", semantic_engine=_make_engine())
+        score = ge.score_guess("maison")
+        assert score < 0.5
 
-    @pytest.mark.skip(reason="semantic scoring not implemented")
     def test_score_is_between_zero_and_one(self):
-        """Score must always be in the range [0, 1]."""
-        assert False, "not implemented"
+        ge = GameEngine("chat", semantic_engine=_make_engine())
+        for word in ["chat", "chien", "maison"]:
+            assert 0.0 <= ge.score_guess(word) <= 1.0
 
+    def test_fallback_exact_match_without_engine(self):
+        """Without a semantic engine, only exact matches score 1.0."""
+        ge = GameEngine("chat")
+        assert ge.score_guess("chat") == 1.0
+        assert ge.score_guess("chien") == 0.0
+
+    def test_unknown_word_falls_back_to_zero(self):
+        """Unknown words should fall back to 0 rather than raise."""
+        ge = GameEngine("chat", semantic_engine=_make_engine())
+        assert ge.score_guess("motinconnu") == 0.0
+
+
+# ---------------------------------------------------------------------------
+# GameEngine – register_guess
+# ---------------------------------------------------------------------------
 
 class TestRegisterGuess:
-    @pytest.mark.skip(reason="not implemented")
     def test_register_guess_records_score(self):
-        """register_guess should record the score for the given user."""
-        assert False, "not implemented"
+        ge = GameEngine("chat", semantic_engine=_make_engine())
+        score = ge.register_guess("alice", "chien")
+        assert ge._guesses["alice"] == score
 
-    @pytest.mark.skip(reason="not implemented")
     def test_register_guess_keeps_best_score(self):
-        """Subsequent guesses should keep the user's best score."""
-        assert False, "not implemented"
+        ge = GameEngine("chat", semantic_engine=_make_engine())
+        ge.register_guess("alice", "maison")  # low score
+        ge.register_guess("alice", "chien")   # higher score
+        assert ge._guesses["alice"] >= ge.score_guess("maison")

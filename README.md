@@ -34,6 +34,7 @@ Players guess a secret word by submitting words in chat. The bot uses word embed
    | `COMMAND_PREFIX` | Prefix for bot commands                  | `!sx`   |
    | `COOLDOWN`       | Cooldown between guesses (seconds)       | `5`     |
    | `DIFFICULTY`     | Game difficulty (`easy`=facile, `hard`=difficile) | `easy` |
+   | `MODEL_PATH`     | Path to the Word2Vec binary model file   | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
 
 3. **Download the word embedding model**
 
@@ -41,8 +42,25 @@ Players guess a secret word by submitting words in chat. The bot uses word embed
    poetry run python download_model.py
    ```
 
-   This will download the required Gensim word2vec model into the `models/` directory
-   (which is not versioned).
+   This downloads the required French Word2Vec model into the `models/`
+   directory (which is not versioned).
+
+   ### Model details
+
+   | Property       | Value |
+   |----------------|-------|
+   | Filename       | `frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+   | Source         | <https://embeddings.net/embeddings/frWac_no_postag_no_phrase_700_skip_cut50.bin> |
+   | Format         | Binary Word2Vec (gensim `KeyedVectors`) |
+   | Approx. size   | ~1 GB |
+   | Licence        | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) — please attribute *ATILF / CNRS & Université de Lorraine* |
+
+   To use a different model, set the `MODEL_PATH` environment variable before
+   starting the bot:
+
+   ```bash
+   MODEL_PATH=/path/to/your/model.bin poetry run python main.py
+   ```
 
 ## Word Lists
 
@@ -86,8 +104,8 @@ streamantix/
 │   ├── bot.py         # Bot definition and commands
 │   └── cooldown.py    # Per-user cooldown logic
 ├── game/              # Game logic
-│   ├── engine.py      # Game state and scoring
-│   └── word_utils.py  # Word loading and processing utilities
+│   ├── engine.py      # SemanticEngine (Word2Vec) and GameEngine (state/scoring)
+│   └── word_utils.py  # Word loading, cleaning, and normalisation utilities
 ├── data/              # Curated French word lists used as target words
 │   ├── interest_words_f.txt  # Easy (facile) word list
 │   └── interest_words_d.txt  # Hard (difficile) word list
