@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Streamantix Overlay</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: transparent;
+      font-family: 'Segoe UI', Tahoma, sans-serif;
+      color: #fff;
+      padding: 12px;
+      font-size: 14px;
+    }
+
+    #overlay {
+      background: rgba(0, 0, 0, 0.72);
+      border-radius: 10px;
+      padding: 12px 16px;
+      max-width: 320px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    /* Header row */
+    #header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    #status-badge {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      padding: 2px 8px;
+      border-radius: 4px;
+      background: #2d7d46;
+    }
+    #status-badge.found   { background: #c9a227; color: #000; }
+    #status-badge.idle    { background: #555; }
+
+    #difficulty {
+      font-size: 11px;
+      color: #aaa;
+    }
+
+    /* Target word reveal */
+    #target-row {
+      display: none;
+      text-align: center;
+      font-size: 22px;
+      font-weight: 700;
+      color: #ffd700;
+      letter-spacing: 0.12em;
+      animation: pop 0.4s ease;
+    }
+    @keyframes pop {
+      0%   { transform: scale(0.7); opacity: 0; }
+      80%  { transform: scale(1.1); }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    /* Heat gauge */
+    #gauge-row { display: flex; flex-direction: column; gap: 3px; }
+    #gauge-label {
+      font-size: 10px;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    #gauge-bar-bg {
+      height: 6px;
+      background: #333;
+      border-radius: 3px;
+      overflow: hidden;
+    }
+    #gauge-bar {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #2d7d46, #c9a227, #c0392b);
+      border-radius: 3px;
+      transition: width 0.6s ease;
+    }
+
+    /* Last guess */
+    #last-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 13px;
+    }
+    #last-word { font-weight: 700; }
+    #last-meta { font-size: 11px; color: #aaa; }
+
+    /* Top guesses */
+    #top-section { display: flex; flex-direction: column; gap: 3px; }
+    #top-label {
+      font-size: 10px;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .top-entry {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+    }
+    .top-rank { width: 14px; color: #666; text-align: right; flex-shrink: 0; }
+    .top-word { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .top-bar-bg {
+      width: 80px;
+      height: 5px;
+      background: #333;
+      border-radius: 3px;
+      flex-shrink: 0;
+      overflow: hidden;
+    }
+    .top-bar {
+      height: 100%;
+      border-radius: 3px;
+      background: #2d7d46;
+      transition: width 0.5s ease;
+    }
+    .top-score { width: 30px; text-align: right; color: #aaa; font-size: 11px; }
+
+    /* Footer */
+    #footer {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      color: #666;
+    }
+
+    /* Commands */
+    #commands { font-size: 10px; color: #777; border-top: 1px solid #333; padding-top: 6px; }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div id="header">
+      <span id="status-badge" class="idle">Idle</span>
+      <span id="difficulty"></span>
+    </div>
+
+    <div id="target-row"></div>
+
+    <div id="gauge-row">
+      <span id="gauge-label">Best score</span>
+      <div id="gauge-bar-bg"><div id="gauge-bar"></div></div>
+    </div>
+
+    <div id="last-row">
+      <span id="last-word">—</span>
+      <span id="last-meta"></span>
+    </div>
+
+    <div id="top-section">
+      <span id="top-label">Top guesses</span>
+      <div id="top-list"></div>
+    </div>
+
+    <div id="footer">
+      <span id="attempt-count">0 guesses</span>
+    </div>
+
+    <div id="commands">!sx guess &lt;word&gt; &nbsp;·&nbsp; !sx hint &nbsp;·&nbsp; !sx help</div>
+  </div>
+
+  <script>
+    const WS_URL = `ws://${location.host}/ws`;
+
+    const elStatus    = document.getElementById('status-badge');
+    const elDiff      = document.getElementById('difficulty');
+    const elTarget    = document.getElementById('target-row');
+    const elGaugeBar  = document.getElementById('gauge-bar');
+    const elLastWord  = document.getElementById('last-word');
+    const elLastMeta  = document.getElementById('last-meta');
+    const elTopList   = document.getElementById('top-list');
+    const elAttempts  = document.getElementById('attempt-count');
+
+    function pct(score) {
+      return score != null ? Math.round(score * 100) : 0;
+    }
+
+    function barColor(score) {
+      const p = score != null ? score : 0;
+      if (p >= 0.9) return '#c9a227';
+      if (p >= 0.6) return '#2d7d46';
+      return '#1a5c8a';
+    }
+
+    function render(state) {
+      // Status badge
+      elStatus.textContent = state.status === 'found'   ? 'Found!'
+                           : state.status === 'running' ? 'Running'
+                           : 'Idle';
+      elStatus.className = state.status === 'found'   ? 'found'
+                         : state.status === 'idle'    ? 'idle'
+                         : '';
+
+      // Difficulty
+      elDiff.textContent = state.difficulty
+        ? state.difficulty.charAt(0).toUpperCase() + state.difficulty.slice(1)
+        : '';
+
+      // Target word reveal
+      if (state.status === 'found' && state.target_word) {
+        elTarget.style.display = 'block';
+        elTarget.textContent = state.target_word.toUpperCase();
+      } else {
+        elTarget.style.display = 'none';
+      }
+
+      // Heat gauge
+      const bestScore = state.best_guess ? state.best_guess.score : 0;
+      elGaugeBar.style.width = pct(bestScore) + '%';
+
+      // Last guess
+      if (state.last_guess) {
+        elLastWord.textContent = state.last_guess.word;
+        const score = state.last_guess.score;
+        elLastMeta.textContent = score != null
+          ? `${pct(score)}%  ·  ${state.last_guess.user}`
+          : `? · ${state.last_guess.user}`;
+      } else {
+        elLastWord.textContent = '—';
+        elLastMeta.textContent = '';
+      }
+
+      // Top guesses list
+      elTopList.innerHTML = '';
+      (state.top_guesses || []).forEach((entry, idx) => {
+        const row = document.createElement('div');
+        row.className = 'top-entry';
+        const w = pct(entry.score);
+        row.innerHTML = `
+          <span class="top-rank">${idx + 1}</span>
+          <span class="top-word">${entry.word}</span>
+          <div class="top-bar-bg">
+            <div class="top-bar" style="width:${w}%;background:${barColor(entry.score)}"></div>
+          </div>
+          <span class="top-score">${w}%</span>`;
+        elTopList.appendChild(row);
+      });
+
+      // Attempt counter
+      elAttempts.textContent = `${state.attempt_count} guess${state.attempt_count !== 1 ? 'es' : ''}`;
+    }
+
+    function connect() {
+      const ws = new WebSocket(WS_URL);
+
+      ws.onmessage = (ev) => {
+        try { render(JSON.parse(ev.data)); } catch (_) {}
+      };
+
+      ws.onclose = () => setTimeout(connect, 3000);
+      ws.onerror = () => ws.close();
+    }
+
+    connect();
+  </script>
+</body>
+</html>

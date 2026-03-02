@@ -4,6 +4,8 @@ import math
 import pathlib
 import random
 import re
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from twitchio.ext import commands
 
@@ -59,15 +61,33 @@ class StreamantixBot(commands.Bot):
     """Streamantix Twitch bot.
 
     Handles chat commands and delegates game logic to the game engine.
+
+    Args:
+        on_state_change: Optional async callback invoked with a serialised
+            game-state dict after each ``start`` or ``guess`` event.  Use this
+            to push updates to the overlay server without tight coupling.
     """
 
     def __init__(self, **kwargs: object) -> None:
         initial_prefix: str = kwargs.pop("prefix", "!sx")  # type: ignore[assignment]
         initial_cooldown: int = kwargs.pop("cooldown", 5)  # type: ignore[assignment]
+        on_state_change: Callable[[dict[str, Any]], Awaitable[None]] | None = kwargs.pop(  # type: ignore[assignment]
+            "on_state_change", None
+        )
         self._command_prefix: str = initial_prefix
         self._cooldown = GlobalCooldown(int(initial_cooldown))
         self._game_state = GameState()
+        self._on_state_change = on_state_change
         super().__init__(prefix=lambda bot, msg: bot._command_prefix, **kwargs)
+
+    async def _notify_overlay(self) -> None:
+        """Fire the overlay callback with the current serialised game state."""
+        callback = getattr(self, "_on_state_change", None)
+        if callback is None:
+            return
+        from overlay.state import serialize_game_state  # lazy import to avoid hard dep
+
+        await callback(serialize_game_state(self._game_state))
 
     async def event_ready(self) -> None:
         """Called once the bot has successfully connected to Twitch."""
@@ -124,6 +144,7 @@ class StreamantixBot(commands.Bot):
             f"A new {diff.value} game has started! "
             f"Guess the secret word using '{self._command_prefix} guess <word>'."
         )
+        await self._notify_overlay()
 
     @commands.command()
     async def guess(self, ctx: commands.Context, word: str = "") -> None:
@@ -161,6 +182,7 @@ class StreamantixBot(commands.Bot):
             await ctx.send(f"'{word}': {pct}% similarity")
         else:
             await ctx.send(f"'{word}' is not in the vocabulary.")
+        await self._notify_overlay()
 
     @commands.command()
     async def setprefix(self, ctx: commands.Context, new_prefix: str = "") -> None:

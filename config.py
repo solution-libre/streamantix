@@ -21,3 +21,5 @@ DIFFICULTY: str = os.getenv("DIFFICULTY", "easy")
 MODEL_PATH: str = os.getenv(
     "MODEL_PATH", "models/frWac_no_postag_no_phrase_700_skip_cut50.bin"
 )
+OVERLAY_ENABLED: bool = os.getenv("OVERLAY_ENABLED", "false").lower() in ("1", "true", "yes")
+OVERLAY_PORT: int = int(os.getenv("OVERLAY_PORT", "8080"))
