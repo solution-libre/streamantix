@@ -1,46 +1,116 @@
-"""Skeleton tests for the cooldown system (bot.cooldown.CooldownManager)."""
+"""Tests for the cooldown system (bot.cooldown)."""
+
+import time
 
 import pytest
 
-from bot.cooldown import CooldownManager
+from bot.cooldown import CooldownManager, GlobalCooldown
 
 
 class TestCooldownManagerInit:
-    @pytest.mark.skip(reason="not implemented")
     def test_default_not_on_cooldown(self):
         """A user who has never issued a command should not be on cooldown."""
-        assert False, "not implemented"
+        mgr = CooldownManager(5)
+        assert not mgr.is_on_cooldown("alice")
 
-    @pytest.mark.skip(reason="not implemented")
     def test_cooldown_seconds_stored(self):
         """The cooldown duration should be stored and retrievable."""
-        assert False, "not implemented"
+        mgr = CooldownManager(10)
+        assert mgr.duration == 10
 
 
 class TestIsOnCooldown:
-    @pytest.mark.skip(reason="not implemented")
     def test_user_on_cooldown_after_record(self):
         """A user should be on cooldown immediately after calling record()."""
-        assert False, "not implemented"
+        mgr = CooldownManager(30)
+        mgr.record("alice")
+        assert mgr.is_on_cooldown("alice")
 
-    @pytest.mark.skip(reason="not implemented")
     def test_user_not_on_cooldown_after_expiry(self):
         """A user should no longer be on cooldown after the cooldown period expires."""
-        assert False, "not implemented"
+        mgr = CooldownManager(0)
+        mgr.record("alice")
+        time.sleep(0.01)
+        assert not mgr.is_on_cooldown("alice")
 
-    @pytest.mark.skip(reason="not implemented")
     def test_different_users_tracked_independently(self):
         """Cooldown state should be tracked independently per user."""
-        assert False, "not implemented"
+        mgr = CooldownManager(30)
+        mgr.record("alice")
+        assert mgr.is_on_cooldown("alice")
+        assert not mgr.is_on_cooldown("bob")
 
 
 class TestRecord:
-    @pytest.mark.skip(reason="not implemented")
     def test_record_updates_timestamp(self):
-        """Calling record() should update the stored timestamp for the user."""
-        assert False, "not implemented"
+        """Calling record() should put the user on cooldown immediately."""
+        mgr = CooldownManager(30)
+        assert not mgr.is_on_cooldown("alice")
+        mgr.record("alice")
+        assert mgr.is_on_cooldown("alice")
 
-    @pytest.mark.skip(reason="not implemented")
     def test_record_new_user(self):
         """record() should work for a user who has not been seen before."""
-        assert False, "not implemented"
+        mgr = CooldownManager(30)
+        mgr.record("newuser")
+        assert mgr.is_on_cooldown("newuser")
+
+
+class TestGlobalCooldownInit:
+    def test_default_not_on_cooldown(self):
+        """A freshly created GlobalCooldown should not be active."""
+        gc = GlobalCooldown(5)
+        assert not gc.is_on_cooldown()
+
+    def test_duration_stored(self):
+        """The cooldown duration should be retrievable via the property."""
+        gc = GlobalCooldown(10)
+        assert gc.duration == 10
+
+    def test_remaining_zero_when_inactive(self):
+        """remaining() should return 0.0 when no guess has been recorded."""
+        gc = GlobalCooldown(5)
+        assert gc.remaining() == 0.0
+
+
+class TestGlobalCooldownIsOnCooldown:
+    def test_on_cooldown_after_record(self):
+        """GlobalCooldown should be active immediately after record()."""
+        gc = GlobalCooldown(30)
+        gc.record()
+        assert gc.is_on_cooldown()
+
+    def test_not_on_cooldown_after_expiry(self):
+        """GlobalCooldown should be inactive after the cooldown period expires."""
+        gc = GlobalCooldown(0)
+        gc.record()
+        time.sleep(0.01)
+        assert not gc.is_on_cooldown()
+
+    def test_remaining_positive_during_cooldown(self):
+        """remaining() should return a positive value while on cooldown."""
+        gc = GlobalCooldown(30)
+        gc.record()
+        assert gc.remaining() > 0
+
+    def test_remaining_never_negative(self):
+        """remaining() should never return a negative value."""
+        gc = GlobalCooldown(0)
+        gc.record()
+        time.sleep(0.01)
+        assert gc.remaining() == 0.0
+
+
+class TestGlobalCooldownSetDuration:
+    def test_set_duration_updates_value(self):
+        """set_duration() should update the cooldown duration."""
+        gc = GlobalCooldown(5)
+        gc.set_duration(15)
+        assert gc.duration == 15
+
+    def test_set_duration_zero_disables_cooldown(self):
+        """Setting duration to 0 should disable the cooldown."""
+        gc = GlobalCooldown(30)
+        gc.record()
+        gc.set_duration(0)
+        assert not gc.is_on_cooldown()

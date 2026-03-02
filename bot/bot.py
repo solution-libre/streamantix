@@ -1,8 +1,11 @@
 """Twitch bot definition and command handlers."""
 
+import math
 import re
 
 from twitchio.ext import commands
+
+from bot.cooldown import GlobalCooldown
 
 _MAX_PREFIX_LEN = 10
 # No whitespace allowed in prefix
@@ -20,6 +23,17 @@ def _validate_prefix(prefix: str | None) -> str | None:
     return None
 
 
+def _validate_cooldown(value: str) -> str | None:
+    """Return an error message string if *value* is not a valid cooldown, else ``None``."""
+    try:
+        seconds = int(value)
+    except (ValueError, TypeError):
+        return "cooldown must be a non-negative integer"
+    if seconds < 0:
+        return "cooldown must be a non-negative integer"
+    return None
+
+
 class StreamantixBot(commands.Bot):
     """Streamantix Twitch bot.
 
@@ -28,7 +42,9 @@ class StreamantixBot(commands.Bot):
 
     def __init__(self, **kwargs: object) -> None:
         initial_prefix: str = kwargs.pop("prefix", "!sx")  # type: ignore[assignment]
+        initial_cooldown: int = kwargs.pop("cooldown", 5)  # type: ignore[assignment]
         self._command_prefix: str = initial_prefix
+        self._cooldown = GlobalCooldown(int(initial_cooldown))
         super().__init__(prefix=lambda bot, msg: bot._command_prefix, **kwargs)
 
     async def event_ready(self) -> None:
@@ -41,6 +57,14 @@ class StreamantixBot(commands.Bot):
 
         Usage: <prefix> guess <word>
         """
+        if self._cooldown.is_on_cooldown():
+            remaining = math.ceil(self._cooldown.remaining())
+            await ctx.send(
+                f"Please wait {remaining} seconds before guessing again."
+            )
+            return
+
+        self._cooldown.record()
         # TODO: implement guess handling using game.engine
         await ctx.send("Guess command not yet implemented.")
 
@@ -69,3 +93,26 @@ class StreamantixBot(commands.Bot):
         await ctx.send(
             f"Command prefix changed from '{old}' to '{new_prefix}' (session only)."
         )
+
+    @commands.command()
+    async def setcooldown(self, ctx: commands.Context, seconds: str = "") -> None:
+        """Change the guess cooldown duration for this session (moderators and broadcaster only).
+
+        Usage: <prefix> setcooldown <seconds>
+
+        The change is applied immediately but is not persisted; it resets when the bot restarts.
+        """
+        if not (ctx.author.is_mod or ctx.author.is_broadcaster):
+            await ctx.send(
+                "Only moderators and the broadcaster can change the cooldown."
+            )
+            return
+
+        error = _validate_cooldown(seconds)
+        if error:
+            await ctx.send(f"Invalid cooldown: {error}")
+            return
+
+        value = int(seconds)
+        self._cooldown.set_duration(value)
+        await ctx.send(f"Cooldown set to {value} seconds (session only).")
