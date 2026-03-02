@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from bot.bot import StreamantixBot, _validate_prefix, _validate_cooldown
+from bot.bot import StreamantixBot, _validate_prefix, _validate_cooldown, _validate_difficulty
 from bot.cooldown import GlobalCooldown
 from game.state import Difficulty, GameState
 
@@ -18,6 +18,7 @@ def _make_bot(prefix: str = "!sx", cooldown: int = 5) -> StreamantixBot:
     bot._command_prefix = prefix
     bot._cooldown = GlobalCooldown(cooldown)
     bot._game_state = GameState()
+    bot._next_difficulty = Difficulty.EASY
     return bot
 
 
@@ -409,7 +410,7 @@ class TestHelpCommand:
         ctx = _make_ctx()
         await _help_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
-        for keyword in ("help", "start", "guess", "setprefix", "setcooldown"):
+        for keyword in ("help", "start", "guess", "setprefix", "setcooldown", "hint", "status", "setdifficulty"):
             assert keyword in message
 
     async def test_help_available_to_any_user(self):
@@ -531,3 +532,235 @@ class TestStartGameState:
             await _start_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "!sx" in message
+
+
+# ---------------------------------------------------------------------------
+# hint command
+# ---------------------------------------------------------------------------
+
+_hint_fn = StreamantixBot.hint._callback
+
+
+class TestHintCommand:
+    async def test_hint_no_game_sends_error(self):
+        bot = _make_bot()
+        ctx = _make_ctx()
+        await _hint_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "no game" in message.lower()
+
+    async def test_hint_no_guesses_sends_message(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        await _hint_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "no scored" in message.lower()
+
+    async def test_hint_with_guesses_shows_leaderboard(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FakeScorer())
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        bot._game_state.submit_guess("alice", "chien")
+        bot._game_state.submit_guess("bob", "maison")
+        ctx = _make_ctx()
+        await _hint_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "1." in message
+        assert "%" in message
+
+    async def test_hint_available_to_any_user(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()  # no special role
+        await _hint_fn(bot, ctx)
+        ctx.send.assert_called_once()
+
+    async def test_hint_shows_at_most_ten_entries(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FakeScorer())
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        for i in range(15):
+            bot._game_state.submit_guess("alice", f"mot{i}")
+        ctx = _make_ctx()
+        await _hint_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        # At most 10 entries means rank 11 should not appear
+        assert "11." not in message
+
+
+# ---------------------------------------------------------------------------
+# status command
+# ---------------------------------------------------------------------------
+
+_status_fn = StreamantixBot.status._callback
+
+
+class TestStatusCommand:
+    async def test_status_no_game_sends_error(self):
+        bot = _make_bot()
+        ctx = _make_ctx()
+        await _status_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "no game" in message.lower()
+
+    async def test_status_game_in_progress_no_guesses(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        await _status_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "in progress" in message.lower()
+        assert "0" in message
+
+    async def test_status_game_in_progress_with_scored_guess(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FakeScorer())
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        bot._game_state.submit_guess("alice", "chien")
+        ctx = _make_ctx()
+        await _status_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "in progress" in message.lower()
+        assert "%" in message
+
+    async def test_status_game_found_shows_winner(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        bot._game_state.submit_guess("alice", "chat")
+        ctx = _make_ctx()
+        await _status_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "alice" in message.lower()
+
+    async def test_status_available_to_any_user(self):
+        bot = _make_bot()
+        ctx = _make_ctx()  # no special role
+        await _status_fn(bot, ctx)
+        ctx.send.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# setdifficulty — validation
+# ---------------------------------------------------------------------------
+
+
+class TestDifficultyValidation:
+    def test_easy_is_valid(self):
+        assert _validate_difficulty("easy") is None
+
+    def test_hard_is_valid(self):
+        assert _validate_difficulty("hard") is None
+
+    def test_medium_is_invalid(self):
+        assert _validate_difficulty("medium") is not None
+
+    def test_empty_is_invalid(self):
+        assert _validate_difficulty("") is not None
+
+    def test_none_is_invalid(self):
+        assert _validate_difficulty(None) is not None
+
+    def test_unknown_value_is_invalid(self):
+        assert _validate_difficulty("impossible") is not None
+
+
+# ---------------------------------------------------------------------------
+# setdifficulty command
+# ---------------------------------------------------------------------------
+
+_setdifficulty_fn = StreamantixBot.setdifficulty._callback
+
+
+class TestSetdifficultyPermissions:
+    async def test_moderator_can_set_difficulty(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx, "hard")
+        assert bot._next_difficulty == Difficulty.HARD
+        ctx.send.assert_called_once()
+
+    async def test_broadcaster_can_set_difficulty(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        await _setdifficulty_fn(bot, ctx, "hard")
+        assert bot._next_difficulty == Difficulty.HARD
+        ctx.send.assert_called_once()
+
+    async def test_regular_user_cannot_set_difficulty(self):
+        bot = _make_bot()
+        ctx = _make_ctx()  # no special role
+        await _setdifficulty_fn(bot, ctx, "hard")
+        assert bot._next_difficulty == Difficulty.EASY  # unchanged
+        ctx.send.assert_called_once()
+        assert "moderator" in ctx.send.call_args[0][0].lower()
+
+
+class TestSetdifficultyValidation:
+    async def test_invalid_difficulty_rejected(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx, "medium")
+        assert bot._next_difficulty == Difficulty.EASY  # unchanged
+        ctx.send.assert_called_once()
+        assert "invalid" in ctx.send.call_args[0][0].lower()
+
+    async def test_empty_difficulty_rejected(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx, "")
+        assert bot._next_difficulty == Difficulty.EASY  # unchanged
+
+    async def test_valid_easy_accepted(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx, "easy")
+        assert bot._next_difficulty == Difficulty.EASY
+        ctx.send.assert_called_once()
+
+    async def test_valid_hard_accepted(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx, "hard")
+        assert bot._next_difficulty == Difficulty.HARD
+        ctx.send.assert_called_once()
+
+    async def test_confirmation_message_contains_difficulty(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx, "hard")
+        message = ctx.send.call_args[0][0]
+        assert "hard" in message.lower()
+
+    async def test_case_insensitive(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx, "HARD")
+        assert bot._next_difficulty == Difficulty.HARD
+
+
+# ---------------------------------------------------------------------------
+# setdifficulty — integration with start command
+# ---------------------------------------------------------------------------
+
+
+class TestSetdifficultyIntegration:
+    async def test_start_uses_next_difficulty_as_default(self):
+        bot = _make_bot()
+        ctx_mod = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx_mod, "hard")
+        assert bot._next_difficulty == Difficulty.HARD
+        ctx_broadcaster = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="ambiguïté"):
+            await _start_fn(bot, ctx_broadcaster)
+        assert bot._game_state.difficulty == Difficulty.HARD
+
+    async def test_setdifficulty_does_not_reset_current_game(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        bot._game_state.submit_guess("alice", "arbre")
+        ctx = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx, "hard")
+        # Current game is unaffected
+        assert bot._game_state.target_word == "chat"
+        assert bot._game_state.attempt_count == 1

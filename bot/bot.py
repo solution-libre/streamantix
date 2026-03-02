@@ -25,8 +25,11 @@ _HELP_TEXT = (
     "help — show this message | "
     "start [easy|medium|hard] — start a new game (broadcaster only) | "
     "guess <word> — submit a guess | "
+    "hint — show top 10 guesses | "
+    "status — show current game status | "
     "setprefix <prefix> — change prefix (mod/broadcaster) | "
-    "setcooldown <seconds> — change cooldown (mod/broadcaster)"
+    "setcooldown <seconds> — change cooldown (mod/broadcaster) | "
+    "setdifficulty <easy|hard> — set difficulty for next game (mod/broadcaster)"
 )
 
 _MAX_PREFIX_LEN = 10
@@ -57,6 +60,19 @@ def _validate_cooldown(value: str) -> str | None:
     return None
 
 
+def _validate_difficulty(value: str | None) -> str | None:
+    """Return an error message string if *value* is not a valid setdifficulty value, else ``None``.
+
+    Note: ``setdifficulty`` only accepts ``easy`` and ``hard``.  ``medium`` is
+    intentionally excluded here; it remains accessible via the ``start`` command
+    for backwards compatibility.
+    """
+    valid = {Difficulty.EASY.value, Difficulty.HARD.value}
+    if not value or value.lower() not in valid:
+        return f"difficulty must be one of: {', '.join(sorted(valid))}"
+    return None
+
+
 class StreamantixBot(commands.Bot):
     """Streamantix Twitch bot.
 
@@ -78,6 +94,7 @@ class StreamantixBot(commands.Bot):
         self._cooldown = GlobalCooldown(int(initial_cooldown))
         self._game_state = GameState()
         self._on_state_change = on_state_change
+        self._next_difficulty: Difficulty = Difficulty.EASY
         super().__init__(prefix=lambda bot, msg: bot._command_prefix, **kwargs)
 
     async def _notify_overlay(self) -> None:
@@ -125,7 +142,7 @@ class StreamantixBot(commands.Bot):
                 await ctx.send(f"Invalid difficulty. Choose from: {valid}")
                 return
         else:
-            diff = Difficulty.EASY
+            diff = self._next_difficulty
 
         word_list_path = _WORD_LIST_FILES[diff]
         try:
@@ -232,3 +249,81 @@ class StreamantixBot(commands.Bot):
         value = int(seconds)
         self._cooldown.set_duration(value)
         await ctx.send(f"Cooldown set to {value} seconds (session only).")
+
+    @commands.command()
+    async def hint(self, ctx: commands.Context) -> None:
+        """Show the top 10 best guesses so far (proximity leaderboard).
+
+        Usage: <prefix> hint
+        """
+        if self._game_state.target_word is None:
+            await ctx.send("No game is currently in progress.")
+            return
+
+        top = self._game_state.top_guesses(10)
+        if not top:
+            await ctx.send("No scored guesses yet.")
+            return
+
+        parts = [
+            f"{i + 1}. {e.raw_word} ({int((e.score or 0.0) * 100)}%)"
+            for i, e in enumerate(top)
+        ]
+        await ctx.send("Top guesses: " + " | ".join(parts))
+
+    @commands.command()
+    async def status(self, ctx: commands.Context) -> None:
+        """Show the current game status.
+
+        Usage: <prefix> status
+        """
+        if self._game_state.target_word is None:
+            await ctx.send("No game is currently in progress.")
+            return
+
+        attempts = self._game_state.attempt_count
+
+        if self._game_state.is_found:
+            found_by = self._game_state.found_by
+            await ctx.send(
+                f"Game over! Word found by {found_by} in {attempts} attempt(s)."
+            )
+            return
+
+        top = self._game_state.top_guesses(1)
+        if top:
+            best = top[0]
+            pct = int((best.score or 0.0) * 100)
+            await ctx.send(
+                f"Game in progress. {attempts} attempt(s). "
+                f"Best guess: '{best.raw_word}' ({pct}%)."
+            )
+        else:
+            await ctx.send(
+                f"Game in progress. {attempts} attempt(s). No scored guesses yet."
+            )
+
+    @commands.command()
+    async def setdifficulty(self, ctx: commands.Context, difficulty: str = "") -> None:
+        """Change the difficulty for the next game (moderators and broadcaster only).
+
+        Usage: <prefix> setdifficulty <easy|hard>
+
+        Does not affect the current game. The change is applied immediately but is
+        not persisted; it resets when the bot restarts.
+        """
+        if not (ctx.author.is_mod or ctx.author.is_broadcaster):
+            await ctx.send(
+                "Only moderators and the broadcaster can change the difficulty."
+            )
+            return
+
+        error = _validate_difficulty(difficulty)
+        if error:
+            await ctx.send(f"Invalid difficulty: {error}")
+            return
+
+        self._next_difficulty = Difficulty(difficulty.lower())
+        await ctx.send(
+            f"Difficulty for the next game set to '{self._next_difficulty.value}' (session only)."
+        )
