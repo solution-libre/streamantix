@@ -172,6 +172,17 @@ class GameState:
         return None  # pragma: no cover
 
     @property
+    def found_by(self) -> str | None:
+        """The user who guessed the target word, or ``None`` if not yet found."""
+        if not self._is_found or self._target_word is None:
+            return None
+        target_normalized = clean_word(self._target_word)
+        for entry in reversed(self._history):
+            if entry.normalized_word == target_normalized:
+                return entry.user
+        return None  # pragma: no cover
+
+    @property
     def attempt_count(self) -> int:
         """Total number of guesses submitted in the current round."""
         return len(self._history)
