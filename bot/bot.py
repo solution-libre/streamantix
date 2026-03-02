@@ -1,12 +1,31 @@
 """Twitch bot definition and command handlers."""
 
 import math
+import pathlib
+import random
 import re
 
 from twitchio.ext import commands
 
 from bot.cooldown import GlobalCooldown
-from game.state import GameState
+from game.state import Difficulty, GameState
+from game.word_utils import load_word_list
+
+_DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
+_WORD_LIST_FILES: dict[Difficulty, pathlib.Path] = {
+    Difficulty.EASY: _DATA_DIR / "interest_words_f.txt",
+    Difficulty.MEDIUM: _DATA_DIR / "interest_words_d.txt",
+    Difficulty.HARD: _DATA_DIR / "interest_words_d.txt",
+}
+
+_HELP_TEXT = (
+    "Commands: "
+    "help — show this message | "
+    "start [easy|medium|hard] — start a new game (broadcaster only) | "
+    "guess <word> — submit a guess | "
+    "setprefix <prefix> — change prefix (mod/broadcaster) | "
+    "setcooldown <seconds> — change cooldown (mod/broadcaster)"
+)
 
 _MAX_PREFIX_LEN = 10
 _MAX_WORD_LEN = 50
@@ -57,6 +76,54 @@ class StreamantixBot(commands.Bot):
     async def event_error(self, error: Exception, data: str | None = None) -> None:
         """Called when an error occurs; logs it without crashing the bot."""
         print(f"Error: {error}")
+
+    @commands.command()
+    async def help(self, ctx: commands.Context) -> None:
+        """Show available commands.
+
+        Usage: <prefix> help
+        """
+        await ctx.send(_HELP_TEXT)
+
+    @commands.command()
+    async def start(self, ctx: commands.Context, difficulty: str = "") -> None:
+        """Start a new game round (broadcaster only).
+
+        Usage: <prefix> start [easy|medium|hard]
+
+        If no difficulty is provided, defaults to easy.
+        """
+        if not ctx.author.is_broadcaster:
+            await ctx.send("Only the broadcaster can start a new game.")
+            return
+
+        if difficulty:
+            try:
+                diff = Difficulty(difficulty.lower())
+            except ValueError:
+                valid = ", ".join(d.value for d in Difficulty)
+                await ctx.send(f"Invalid difficulty. Choose from: {valid}")
+                return
+        else:
+            diff = Difficulty.EASY
+
+        word_list_path = _WORD_LIST_FILES[diff]
+        try:
+            words = load_word_list(word_list_path)
+        except FileNotFoundError:
+            await ctx.send("Word list not found. Cannot start game.")
+            return
+
+        if not words:
+            await ctx.send("Word list is empty. Cannot start game.")
+            return
+
+        target = random.choice(words)
+        self._game_state.start_new_game(target, diff)
+        await ctx.send(
+            f"A new {diff.value} game has started! "
+            f"Guess the secret word using '{self._command_prefix} guess <word>'."
+        )
 
     @commands.command()
     async def guess(self, ctx: commands.Context, word: str = "") -> None:

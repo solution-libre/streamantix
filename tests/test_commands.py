@@ -1,7 +1,7 @@
 """Tests for command parsing, prefix configuration, and permission checks (bot.bot)."""
 
 import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from bot.bot import StreamantixBot, _validate_prefix, _validate_cooldown
 from bot.cooldown import GlobalCooldown
@@ -388,3 +388,146 @@ class TestEventError:
     async def test_event_error_with_data_does_not_raise(self):
         bot = _make_bot()
         await bot.event_error(RuntimeError("reconnecting"), data="some data")
+
+
+# ---------------------------------------------------------------------------
+# help command
+# ---------------------------------------------------------------------------
+
+_help_fn = StreamantixBot.help._callback
+
+
+class TestHelpCommand:
+    async def test_help_sends_message(self):
+        bot = _make_bot()
+        ctx = _make_ctx()
+        await _help_fn(bot, ctx)
+        ctx.send.assert_called_once()
+
+    async def test_help_message_mentions_commands(self):
+        bot = _make_bot()
+        ctx = _make_ctx()
+        await _help_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        for keyword in ("help", "start", "guess", "setprefix", "setcooldown"):
+            assert keyword in message
+
+    async def test_help_available_to_any_user(self):
+        """Any user (no mod/broadcaster role) can call help."""
+        bot = _make_bot()
+        ctx = _make_ctx()  # no special role
+        await _help_fn(bot, ctx)
+        ctx.send.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# start command
+# ---------------------------------------------------------------------------
+
+_start_fn = StreamantixBot.start._callback
+
+
+class TestStartPermissions:
+    async def test_non_broadcaster_cannot_start(self):
+        bot = _make_bot()
+        ctx = _make_ctx()  # no special role
+        await _start_fn(bot, ctx)
+        ctx.send.assert_called_once()
+        assert "broadcaster" in ctx.send.call_args[0][0].lower()
+        assert bot._game_state.target_word is None
+
+    async def test_moderator_cannot_start(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _start_fn(bot, ctx)
+        ctx.send.assert_called_once()
+        assert "broadcaster" in ctx.send.call_args[0][0].lower()
+        assert bot._game_state.target_word is None
+
+    async def test_broadcaster_can_start(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="chat"):
+            await _start_fn(bot, ctx)
+        ctx.send.assert_called_once()
+        assert bot._game_state.target_word == "chat"
+
+
+class TestStartDifficulty:
+    async def test_no_difficulty_defaults_to_easy(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="chat"):
+            await _start_fn(bot, ctx)
+        assert bot._game_state.difficulty == Difficulty.EASY
+
+    async def test_easy_difficulty_accepted(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="chat"):
+            await _start_fn(bot, ctx, "easy")
+        assert bot._game_state.difficulty == Difficulty.EASY
+
+    async def test_hard_difficulty_accepted(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="ambiguïté"):
+            await _start_fn(bot, ctx, "hard")
+        assert bot._game_state.difficulty == Difficulty.HARD
+
+    async def test_medium_difficulty_accepted(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="ambiguïté"):
+            await _start_fn(bot, ctx, "medium")
+        assert bot._game_state.difficulty == Difficulty.MEDIUM
+
+    async def test_invalid_difficulty_sends_error(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        await _start_fn(bot, ctx, "impossible")
+        ctx.send.assert_called_once()
+        assert "invalid" in ctx.send.call_args[0][0].lower()
+        assert bot._game_state.target_word is None
+
+    async def test_difficulty_is_case_insensitive(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="chat"):
+            await _start_fn(bot, ctx, "EASY")
+        assert bot._game_state.difficulty == Difficulty.EASY
+
+
+class TestStartGameState:
+    async def test_start_sets_target_word(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="bateau"):
+            await _start_fn(bot, ctx)
+        assert bot._game_state.target_word == "bateau"
+
+    async def test_start_resets_previous_game(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("old_word", Difficulty.EASY)
+        bot._game_state.submit_guess("alice", "arbre")
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="chat"):
+            await _start_fn(bot, ctx)
+        assert bot._game_state.target_word == "chat"
+        assert bot._game_state.attempt_count == 0
+
+    async def test_start_confirmation_message_contains_difficulty(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="chat"):
+            await _start_fn(bot, ctx, "easy")
+        message = ctx.send.call_args[0][0]
+        assert "easy" in message.lower()
+
+    async def test_start_confirmation_message_contains_prefix(self):
+        bot = _make_bot("!sx")
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("random.choice", return_value="chat"):
+            await _start_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "!sx" in message
