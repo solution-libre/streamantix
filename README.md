@@ -27,14 +27,16 @@ Players guess a secret word by submitting words in chat. The bot uses word embed
    cp .env.example .env
    ```
 
-   | Variable         | Description                              | Default |
-   |------------------|------------------------------------------|---------|
-   | `TWITCH_TOKEN`   | Twitch OAuth token (`oauth:...`)         | —       |
-   | `TWITCH_CHANNEL` | Twitch channel name to join              | —       |
-   | `COMMAND_PREFIX` | Prefix for bot commands                  | `!sx`   |
-   | `COOLDOWN`       | Cooldown between guesses (seconds)       | `5`     |
-   | `DIFFICULTY`     | Game difficulty (`easy`=facile, `hard`=difficile) | `easy` |
-   | `MODEL_PATH`     | Path to the Word2Vec binary model file   | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+   | Variable           | Description                              | Default |
+   |--------------------|------------------------------------------|---------|
+   | `TWITCH_TOKEN`     | Twitch OAuth token (`oauth:...`)         | —       |
+   | `TWITCH_CHANNEL`   | Twitch channel name to join              | —       |
+   | `COMMAND_PREFIX`   | Prefix for bot commands                  | `!sx`   |
+   | `COOLDOWN`         | Cooldown between guesses (seconds)       | `5`     |
+   | `DIFFICULTY`       | Game difficulty (`easy`=facile, `hard`=difficile) | `easy` |
+   | `MODEL_PATH`       | Path to the Word2Vec binary model file   | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+   | `OVERLAY_ENABLED`  | Start the web overlay server             | `false` |
+   | `OVERLAY_PORT`     | TCP port for the overlay server          | `8080`  |
 
 3. **Download the word embedding model**
 
@@ -141,6 +143,61 @@ in `.env` (or the default `!sx`) when the bot restarts.
 Using a unique prefix is recommended if multiple bots share the same channel, so
 that their commands do not interfere with each other.
 
+## Stream Overlay
+
+Streamantix includes a lightweight web overlay that can be added as a **Browser Source** in OBS Studio.
+It displays live game information: best guess, last guess, attempt count, top-10 leaderboard, game status, and more.
+
+### How to start the overlay
+
+1. Enable the overlay in your `.env` file:
+
+   ```env
+   OVERLAY_ENABLED=true
+   OVERLAY_PORT=8080   # optional, 8080 is the default
+   ```
+
+2. Start the bot as usual:
+
+   ```bash
+   poetry run python main.py
+   ```
+
+   The overlay server starts automatically alongside the bot on the configured port.
+
+### OBS configuration
+
+1. In OBS, add a new **Browser Source**.
+2. Set the URL to:
+
+   ```
+   http://localhost:8080/overlay
+   ```
+
+   If the bot is running on a different machine, replace `localhost` with the host's IP address and make sure port `8080` is reachable from the OBS machine.
+
+3. Recommended browser source settings:
+   - **Width**: 320 px
+   - **Height**: 500 px
+   - **Custom CSS**: `body { background: transparent; }` (already set by the overlay)
+   - Enable **"Refresh browser when scene becomes active"** for reliability.
+
+### Environment variables
+
+| Variable          | Description                                      | Default  |
+|-------------------|--------------------------------------------------|----------|
+| `OVERLAY_ENABLED` | Set to `true` to start the overlay server        | `false`  |
+| `OVERLAY_PORT`    | TCP port for the overlay HTTP/WebSocket server   | `8080`   |
+
+### Network tips
+
+- The overlay uses a WebSocket connection (`ws://<host>:<port>/ws`) for real-time updates.
+- If OBS is on the same machine as the bot, use `localhost`.
+- If running across machines, ensure the firewall allows inbound TCP on `OVERLAY_PORT`.
+- The overlay page auto-reconnects every 3 seconds if the WebSocket drops.
+
+
+
 ## Running
 
 ```bash
@@ -157,6 +214,11 @@ streamantix/
 ├── game/              # Game logic
 │   ├── engine.py      # SemanticEngine (Word2Vec) and GameEngine (state/scoring)
 │   └── word_utils.py  # Word loading, cleaning, and normalisation utilities
+├── overlay/           # Web overlay for OBS
+│   ├── server.py      # Starlette WebSocket + HTTP server
+│   ├── state.py       # Game-state serialisation for the overlay
+│   └── static/
+│       └── index.html # OBS browser-source overlay page
 ├── data/              # Curated French word lists used as target words
 │   ├── interest_words_f.txt  # Easy (facile) word list
 │   └── interest_words_d.txt  # Hard (difficile) word list
