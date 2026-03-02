@@ -18,3 +18,6 @@ TWITCH_CHANNEL: str = _require("TWITCH_CHANNEL")
 COMMAND_PREFIX: str = os.getenv("COMMAND_PREFIX", "!sx")
 COOLDOWN: int = int(os.getenv("COOLDOWN", "5"))
 DIFFICULTY: str = os.getenv("DIFFICULTY", "easy")
+MODEL_PATH: str = os.getenv(
+    "MODEL_PATH", "models/frWac_no_postag_no_phrase_700_skip_cut50.bin"
+)
