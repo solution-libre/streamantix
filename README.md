@@ -204,6 +204,103 @@ It displays live game information: best guess, last guess, attempt count, top-10
 poetry run python main.py
 ```
 
+## Docker Deployment
+
+### Prerequisites
+
+- [Docker](https://docs.docker.com/get-docker/) 24+
+- [Docker Compose](https://docs.docker.com/compose/) v2 (included with Docker Desktop)
+
+### Build the image
+
+```bash
+docker build -t streamantix .
+```
+
+### Run with `docker run`
+
+Create a `.env` file from the example (see [Setup](#setup)), then:
+
+```bash
+docker run --rm \
+  --env-file .env \
+  -v "$(pwd)/models:/app/models" \
+  -p 8080:8080 \
+  streamantix
+```
+
+- The `-v` flag mounts a local `models/` directory into the container so the
+  Word2Vec model is downloaded once and persisted across restarts.
+- The `-p 8080:8080` flag is only necessary when `OVERLAY_ENABLED=true`.
+- On the first run the model (~1 GB) is downloaded automatically. Subsequent
+  starts skip the download if the file is already present in the mounted volume.
+
+### Run with Docker Compose
+
+```bash
+docker compose up
+```
+
+Docker Compose reads your `.env` file automatically, mounts `./models` as a
+persistent volume, and exposes the overlay port (default `8080`).
+
+To rebuild the image after code changes:
+
+```bash
+docker compose up --build
+```
+
+To run in the background:
+
+```bash
+docker compose up -d
+docker compose logs -f   # stream logs
+docker compose down      # stop and remove the container
+```
+
+### Persistent model storage
+
+The container writes the Word2Vec model to `/app/models` inside the container.
+Mount a host directory or a named Docker volume at that path so the model
+survives container restarts:
+
+```bash
+# Named Docker volume (recommended for production)
+docker volume create streamantix-models
+docker run --rm \
+  --env-file .env \
+  -v streamantix-models:/app/models \
+  streamantix
+```
+
+With Docker Compose the `./models` bind-mount in `docker-compose.yml` serves
+the same purpose for local development.
+
+### Environment variables
+
+All variables are documented in `.env.example`. The table below summarises the
+most important ones:
+
+| Variable           | Description                                               | Default |
+|--------------------|-----------------------------------------------------------|---------|
+| `TWITCH_TOKEN`     | Twitch OAuth token (`oauth:…`) — **required**             | —       |
+| `TWITCH_CHANNEL`   | Twitch channel name to join — **required**                | —       |
+| `COMMAND_PREFIX`   | Prefix for bot commands                                   | `!sx`   |
+| `COOLDOWN`         | Cooldown between guesses (seconds)                        | `5`     |
+| `DIFFICULTY`       | Game difficulty (`easy` / `hard`)                         | `easy`  |
+| `MODEL_PATH`       | Path to the Word2Vec binary model inside the container    | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+| `OVERLAY_ENABLED`  | Set to `true` to start the web overlay server             | `false` |
+| `OVERLAY_PORT`     | TCP port for the overlay HTTP/WebSocket server            | `8080`  |
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---------|-------------|-----|
+| Container exits immediately with *"Required environment variable … is not set"* | `.env` file not passed or incomplete | Add `--env-file .env` to `docker run`, or verify all required variables in `docker-compose.yml` |
+| Model download fails / times out | No internet access from the container | Ensure outbound HTTPS is allowed, or pre-download the model and place it in the mounted `models/` directory |
+| Overlay not reachable from OBS | Port not published | Add `-p 8080:8080` to `docker run` or uncomment the port in `docker-compose.yml`; check firewall rules |
+| Permission denied writing to `models/` | Volume mounted as read-only or wrong ownership | Ensure the host directory is writable by UID 1000 (`chown -R 1000:1000 ./models`) |
+
 ## Project Structure
 
 ```
