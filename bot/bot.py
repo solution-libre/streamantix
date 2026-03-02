@@ -6,8 +6,10 @@ import re
 from twitchio.ext import commands
 
 from bot.cooldown import GlobalCooldown
+from game.state import GameState
 
 _MAX_PREFIX_LEN = 10
+_MAX_WORD_LEN = 50
 # No whitespace allowed in prefix
 _VALID_PREFIX_RE = re.compile(r"^\S+$")
 
@@ -45,14 +47,19 @@ class StreamantixBot(commands.Bot):
         initial_cooldown: int = kwargs.pop("cooldown", 5)  # type: ignore[assignment]
         self._command_prefix: str = initial_prefix
         self._cooldown = GlobalCooldown(int(initial_cooldown))
+        self._game_state = GameState()
         super().__init__(prefix=lambda bot, msg: bot._command_prefix, **kwargs)
 
     async def event_ready(self) -> None:
         """Called once the bot has successfully connected to Twitch."""
         print(f"Logged in as {self.nick}")
 
+    async def event_error(self, error: Exception, data: str | None = None) -> None:
+        """Called when an error occurs; logs it without crashing the bot."""
+        print(f"Error: {error}")
+
     @commands.command()
-    async def guess(self, ctx: commands.Context) -> None:
+    async def guess(self, ctx: commands.Context, word: str = "") -> None:
         """Accept a word guess from a chat participant.
 
         Usage: <prefix> guess <word>
@@ -65,8 +72,28 @@ class StreamantixBot(commands.Bot):
             return
 
         self._cooldown.record()
-        # TODO: implement guess handling using game.engine
-        await ctx.send("Guess command not yet implemented.")
+
+        if not word:
+            await ctx.send("Please provide a word to guess.")
+            return
+
+        if len(word) > _MAX_WORD_LEN:
+            await ctx.send(f"Word is too long (max {_MAX_WORD_LEN} characters).")
+            return
+
+        try:
+            result = self._game_state.submit_guess(ctx.author.name, word)
+        except RuntimeError:
+            await ctx.send("No game is currently in progress.")
+            return
+
+        if result.is_found:
+            await ctx.send(f"🎉 {ctx.author.name} found the word '{word}'!")
+        elif result.entry.score is not None:
+            pct = int(result.entry.score * 100)
+            await ctx.send(f"'{word}': {pct}% similarity")
+        else:
+            await ctx.send(f"'{word}' is not in the vocabulary.")
 
     @commands.command()
     async def setprefix(self, ctx: commands.Context, new_prefix: str = "") -> None:

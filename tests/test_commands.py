@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from bot.bot import StreamantixBot, _validate_prefix, _validate_cooldown
 from bot.cooldown import GlobalCooldown
+from game.state import Difficulty, GameState
 
 
 # ---------------------------------------------------------------------------
@@ -16,6 +17,7 @@ def _make_bot(prefix: str = "!sx", cooldown: int = 5) -> StreamantixBot:
     bot = object.__new__(StreamantixBot)
     bot._command_prefix = prefix
     bot._cooldown = GlobalCooldown(cooldown)
+    bot._game_state = GameState()
     return bot
 
 
@@ -308,3 +310,81 @@ class TestGuessCooldownEnforcement:
         await _guess_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "second" in message.lower()
+
+
+# ---------------------------------------------------------------------------
+# guess — game routing
+# ---------------------------------------------------------------------------
+
+
+class _FakeScorer:
+    """Deterministic scorer: returns 0.5 for any non-exact guess."""
+
+    def score_guess(self, guess: str, target: str) -> float | None:
+        from game.word_utils import clean_word
+        if clean_word(guess) == clean_word(target):
+            return 1.0
+        return 0.5
+
+
+class TestGuessRouting:
+    async def test_guess_without_word_sends_usage_hint(self):
+        bot = _make_bot(cooldown=0)
+        ctx = _make_ctx()
+        await _guess_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "provide" in message.lower() or "usage" in message.lower()
+
+    async def test_guess_without_active_game_sends_error(self):
+        bot = _make_bot(cooldown=0)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        await _guess_fn(bot, ctx, "chat")
+        message = ctx.send.call_args[0][0]
+        assert "no game" in message.lower()
+
+    async def test_guess_exact_match_announces_winner(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        await _guess_fn(bot, ctx, "chat")
+        message = ctx.send.call_args[0][0]
+        assert "alice" in message.lower()
+        assert "chat" in message.lower()
+
+    async def test_guess_near_match_shows_similarity(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FakeScorer())
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        await _guess_fn(bot, ctx, "chien")
+        message = ctx.send.call_args[0][0]
+        assert "%" in message
+
+    async def test_guess_unknown_word_reports_vocabulary_miss(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        # No scorer, so non-exact guess produces score=None
+        await _guess_fn(bot, ctx, "unknownword")
+        message = ctx.send.call_args[0][0]
+        assert "vocabulary" in message.lower()
+
+
+# ---------------------------------------------------------------------------
+# event_error
+# ---------------------------------------------------------------------------
+
+
+class TestEventError:
+    async def test_event_error_does_not_raise(self):
+        """event_error should swallow exceptions without crashing."""
+        bot = _make_bot()
+        await bot.event_error(RuntimeError("connection lost"))
+
+    async def test_event_error_with_data_does_not_raise(self):
+        bot = _make_bot()
+        await bot.event_error(RuntimeError("reconnecting"), data="some data")
