@@ -9,6 +9,7 @@ def main() -> None:
     bot = StreamantixBot(
         token=config.TWITCH_TOKEN,
         prefix=config.COMMAND_PREFIX,
+        cooldown=config.COOLDOWN,
         initial_channels=[config.TWITCH_CHANNEL],
     )
     bot.run()

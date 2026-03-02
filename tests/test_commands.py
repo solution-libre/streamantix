@@ -3,17 +3,19 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-from bot.bot import StreamantixBot, _validate_prefix
+from bot.bot import StreamantixBot, _validate_prefix, _validate_cooldown
+from bot.cooldown import GlobalCooldown
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_bot(prefix: str = "!sx") -> StreamantixBot:
+def _make_bot(prefix: str = "!sx", cooldown: int = 5) -> StreamantixBot:
     """Return a StreamantixBot instance without connecting to Twitch."""
     bot = object.__new__(StreamantixBot)
     bot._command_prefix = prefix
+    bot._cooldown = GlobalCooldown(cooldown)
     return bot
 
 
@@ -178,3 +180,131 @@ class TestCooldownEnforcement:
         message = ctx.send.call_args[0][0]
         assert "!sx" in message
         assert "?" in message
+
+
+# ---------------------------------------------------------------------------
+# Cooldown validation (pure function)
+# ---------------------------------------------------------------------------
+
+class TestCooldownValidation:
+    def test_zero_is_valid(self):
+        assert _validate_cooldown("0") is None
+
+    def test_positive_integer_is_valid(self):
+        assert _validate_cooldown("10") is None
+
+    def test_negative_is_invalid(self):
+        assert _validate_cooldown("-1") is not None
+
+    def test_non_integer_is_invalid(self):
+        assert _validate_cooldown("abc") is not None
+
+    def test_float_is_invalid(self):
+        assert _validate_cooldown("2.5") is not None
+
+    def test_empty_string_is_invalid(self):
+        assert _validate_cooldown("") is not None
+
+
+# ---------------------------------------------------------------------------
+# setcooldown command
+# ---------------------------------------------------------------------------
+
+_setcooldown_fn = StreamantixBot.setcooldown._callback
+
+
+class TestSetcooldownPermissions:
+    async def test_moderator_can_set_cooldown(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setcooldown_fn(bot, ctx, "10")
+        assert bot._cooldown.duration == 10
+        ctx.send.assert_called_once()
+
+    async def test_broadcaster_can_set_cooldown(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        await _setcooldown_fn(bot, ctx, "10")
+        assert bot._cooldown.duration == 10
+        ctx.send.assert_called_once()
+
+    async def test_regular_user_cannot_set_cooldown(self):
+        bot = _make_bot()
+        ctx = _make_ctx()
+        await _setcooldown_fn(bot, ctx, "10")
+        assert bot._cooldown.duration == 5  # unchanged
+        ctx.send.assert_called_once()
+        assert "moderator" in ctx.send.call_args[0][0].lower()
+
+
+class TestSetcooldownValidation:
+    async def test_valid_cooldown_is_applied(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setcooldown_fn(bot, ctx, "20")
+        assert bot._cooldown.duration == 20
+
+    async def test_zero_cooldown_is_accepted(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setcooldown_fn(bot, ctx, "0")
+        assert bot._cooldown.duration == 0
+
+    async def test_invalid_cooldown_sends_error(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setcooldown_fn(bot, ctx, "bad")
+        assert bot._cooldown.duration == 5  # unchanged
+        ctx.send.assert_called_once()
+        assert "invalid" in ctx.send.call_args[0][0].lower()
+
+    async def test_negative_cooldown_rejected(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setcooldown_fn(bot, ctx, "-1")
+        assert bot._cooldown.duration == 5  # unchanged
+
+    async def test_confirmation_message_contains_value(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setcooldown_fn(bot, ctx, "7")
+        assert "7" in ctx.send.call_args[0][0]
+
+
+# ---------------------------------------------------------------------------
+# guess — cooldown enforcement
+# ---------------------------------------------------------------------------
+
+_guess_fn = StreamantixBot.guess._callback
+
+
+class TestGuessCooldownEnforcement:
+    async def test_guess_blocked_during_cooldown(self):
+        bot = _make_bot(cooldown=30)
+        bot._cooldown.record()  # simulate a recent guess
+        ctx = _make_ctx()
+        await _guess_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "wait" in message.lower()
+
+    async def test_guess_allowed_when_not_on_cooldown(self):
+        bot = _make_bot(cooldown=0)
+        ctx = _make_ctx()
+        await _guess_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "wait" not in message.lower()
+
+    async def test_guess_records_cooldown(self):
+        bot = _make_bot(cooldown=30)
+        ctx = _make_ctx()
+        assert not bot._cooldown.is_on_cooldown()
+        await _guess_fn(bot, ctx)
+        assert bot._cooldown.is_on_cooldown()
+
+    async def test_blocked_guess_message_mentions_seconds(self):
+        bot = _make_bot(cooldown=30)
+        bot._cooldown.record()
+        ctx = _make_ctx()
+        await _guess_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "second" in message.lower()
