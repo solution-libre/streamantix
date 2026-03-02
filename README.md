@@ -90,6 +90,34 @@ Run with coverage report:
 poetry run pytest --cov
 ```
 
+## Changing the Command Prefix
+
+By default the bot listens for commands starting with `!sx` (e.g. `!sx guess chat`).
+You can configure a different prefix to avoid conflicts with other bots in the channel.
+
+### At startup
+
+Set `COMMAND_PREFIX` in your `.env` file before starting the bot:
+
+```
+COMMAND_PREFIX=?sx
+```
+
+### At runtime (moderators and broadcaster only)
+
+Use the `setprefix` command in Twitch chat:
+
+```
+!sx setprefix ?sx
+```
+
+The change takes effect immediately for all subsequent messages in the session.
+It is **not** persisted to the configuration file; the prefix resets to the value
+in `.env` (or the default `!sx`) when the bot restarts.
+
+Using a unique prefix is recommended if multiple bots share the same channel, so
+that their commands do not interfere with each other.
+
 ## Running
 
 ```bash
