@@ -24,10 +24,10 @@ httpx = "^0.28"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "--cov=bot --cov=game --cov=overlay --cov-report=term-missing"
+addopts = "--cov=bot --cov=game --cov=overlay --cov=auth --cov-report=term-missing"
 
 [tool.coverage.run]
-source = ["bot", "game", "overlay"]
+source = ["bot", "game", "overlay", "auth"]
 
 [build-system]
 requires = ["poetry-core"]
