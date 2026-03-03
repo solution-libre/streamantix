@@ -4,6 +4,9 @@ models/
 # Environment variables
 .env
 
+# Secrets (OAuth token storage)
+.secrets/
+
 # Python
 __pycache__/
 *.py[cod]

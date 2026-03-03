@@ -13,7 +13,8 @@ def _require(name: str) -> str:
     return value
 
 
-TWITCH_TOKEN: str = _require("TWITCH_TOKEN")
+# Optional: kept for users who still want to supply a token manually.
+TWITCH_TOKEN: str | None = os.getenv("TWITCH_TOKEN")
 TWITCH_CHANNEL: str = _require("TWITCH_CHANNEL")
 COMMAND_PREFIX: str = os.getenv("COMMAND_PREFIX", "!sx")
 COOLDOWN: int = int(os.getenv("COOLDOWN", "5"))
@@ -23,3 +24,10 @@ MODEL_PATH: str = os.getenv(
 )
 OVERLAY_ENABLED: bool = os.getenv("OVERLAY_ENABLED", "false").lower() in ("1", "true", "yes")
 OVERLAY_PORT: int = int(os.getenv("OVERLAY_PORT", "8080"))
+
+# Twitch OAuth (Authorization Code flow)
+TWITCH_CLIENT_ID: str | None = os.getenv("TWITCH_CLIENT_ID")
+TWITCH_CLIENT_SECRET: str | None = os.getenv("TWITCH_CLIENT_SECRET")
+TWITCH_REDIRECT_URI: str = os.getenv("TWITCH_REDIRECT_URI", "http://localhost:4343/callback")
+TWITCH_SCOPES: str = os.getenv("TWITCH_SCOPES", "chat:read chat:edit")
+TWITCH_TOKEN_PATH: str = os.getenv("TWITCH_TOKEN_PATH", ".secrets/twitch_tokens.json")

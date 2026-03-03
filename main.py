@@ -1,19 +1,69 @@
 """Entry point for the streamantix bot."""
 
 import asyncio
+import sys
 
 from bot.bot import StreamantixBot
 import config
 
 
+def _resolve_token() -> str:
+    """Return a valid Twitch access token.
+
+    Resolution order:
+    1. ``TWITCH_TOKEN`` env var (manual / legacy).
+    2. Stored token file (refresh if near expiry).
+    3. Full OAuth login flow (browser redirect).
+    """
+    if config.TWITCH_TOKEN:
+        return config.TWITCH_TOKEN
+
+    if not config.TWITCH_CLIENT_ID or not config.TWITCH_CLIENT_SECRET:
+        raise RuntimeError(
+            "No token available. Set TWITCH_TOKEN, or set TWITCH_CLIENT_ID and "
+            "TWITCH_CLIENT_SECRET to enable the OAuth flow."
+        )
+
+    from auth.twitch_auth import TokenManager
+
+    manager = TokenManager(
+        client_id=config.TWITCH_CLIENT_ID,
+        client_secret=config.TWITCH_CLIENT_SECRET,
+        redirect_uri=config.TWITCH_REDIRECT_URI,
+        scopes=config.TWITCH_SCOPES,
+        token_path=config.TWITCH_TOKEN_PATH,
+    )
+    return manager.get_token()
+
+
 def main() -> None:
     """Start the Twitch bot, and optionally the overlay server."""
+    if len(sys.argv) > 1 and sys.argv[1] == "auth-login":
+        # CLI mode: force a new login flow and exit.
+        if not config.TWITCH_CLIENT_ID or not config.TWITCH_CLIENT_SECRET:
+            raise RuntimeError(
+                "TWITCH_CLIENT_ID and TWITCH_CLIENT_SECRET must be set for auth-login."
+            )
+        from auth.twitch_auth import TokenManager
+
+        manager = TokenManager(
+            client_id=config.TWITCH_CLIENT_ID,
+            client_secret=config.TWITCH_CLIENT_SECRET,
+            redirect_uri=config.TWITCH_REDIRECT_URI,
+            scopes=config.TWITCH_SCOPES,
+            token_path=config.TWITCH_TOKEN_PATH,
+        )
+        manager.login()
+        return
+
+    token = _resolve_token()
+
     if config.OVERLAY_ENABLED:
         from overlay.server import OverlayServer
 
         overlay = OverlayServer(host="0.0.0.0", port=config.OVERLAY_PORT)
         bot = StreamantixBot(
-            token=config.TWITCH_TOKEN,
+            token=token,
             prefix=config.COMMAND_PREFIX,
             cooldown=config.COOLDOWN,
             initial_channels=[config.TWITCH_CHANNEL],
@@ -26,7 +76,7 @@ def main() -> None:
         asyncio.run(_run())
     else:
         bot = StreamantixBot(
-            token=config.TWITCH_TOKEN,
+            token=token,
             prefix=config.COMMAND_PREFIX,
             cooldown=config.COOLDOWN,
             initial_channels=[config.TWITCH_CHANNEL],

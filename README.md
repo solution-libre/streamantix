@@ -9,7 +9,8 @@ Players guess a secret word by submitting words in chat. The bot uses word embed
 
 - Python 3.12+
 - [Poetry](https://python-poetry.org/) for dependency management
-- A Twitch account with an OAuth token
+- A Twitch account (with either a manually generated OAuth token **or** a
+  registered Twitch Developer application for the full OAuth flow)
 
 ## Setup
 
@@ -27,16 +28,90 @@ Players guess a secret word by submitting words in chat. The bot uses word embed
    cp .env.example .env
    ```
 
-   | Variable           | Description                              | Default |
-   |--------------------|------------------------------------------|---------|
-   | `TWITCH_TOKEN`     | Twitch OAuth token (`oauth:...`)         | —       |
-   | `TWITCH_CHANNEL`   | Twitch channel name to join              | —       |
-   | `COMMAND_PREFIX`   | Prefix for bot commands                  | `!sx`   |
-   | `COOLDOWN`         | Cooldown between guesses (seconds)       | `5`     |
-   | `DIFFICULTY`       | Game difficulty (`easy`=facile, `hard`=difficile) | `easy` |
-   | `MODEL_PATH`       | Path to the Word2Vec binary model file   | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
-   | `OVERLAY_ENABLED`  | Start the web overlay server             | `false` |
-   | `OVERLAY_PORT`     | TCP port for the overlay server          | `8080`  |
+   | Variable               | Description                                                    | Default |
+   |------------------------|----------------------------------------------------------------|---------|
+   | `TWITCH_TOKEN`         | Manual OAuth token (`oauth:…`) — optional if using OAuth flow | —       |
+   | `TWITCH_CHANNEL`       | Twitch channel name to join — **required**                     | —       |
+   | `TWITCH_CLIENT_ID`     | Twitch app client ID (OAuth flow)                              | —       |
+   | `TWITCH_CLIENT_SECRET` | Twitch app client secret (OAuth flow)                          | —       |
+   | `TWITCH_REDIRECT_URI`  | OAuth redirect URI                                             | `http://localhost:4343/callback` |
+   | `TWITCH_SCOPES`        | Space-separated OAuth scopes                                   | `chat:read chat:edit` |
+   | `TWITCH_TOKEN_PATH`    | Path to the JSON token storage file                            | `.secrets/twitch_tokens.json` |
+   | `COMMAND_PREFIX`       | Prefix for bot commands                                        | `!sx`   |
+   | `COOLDOWN`             | Cooldown between guesses (seconds)                             | `5`     |
+   | `DIFFICULTY`           | Game difficulty (`easy`=facile, `hard`=difficile)              | `easy`  |
+   | `MODEL_PATH`           | Path to the Word2Vec binary model file                         | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+   | `OVERLAY_ENABLED`      | Start the web overlay server                                   | `false` |
+   | `OVERLAY_PORT`         | TCP port for the overlay server                                | `8080`  |
+
+## Twitch Authentication
+
+There are two ways to authenticate the bot with Twitch.
+
+### Option A — Manual token (quick start)
+
+Set `TWITCH_TOKEN` to an OAuth token you generate manually (e.g. via
+<https://twitchapps.com/tmi/>):
+
+```env
+TWITCH_TOKEN=oauth:xxxxxxxxxx
+```
+
+The bot will use this token directly, skipping the OAuth flow entirely.
+
+### Option B — OAuth Authorization Code flow (recommended)
+
+This approach lets the bot obtain and automatically refresh tokens without
+you ever copying a token manually.
+
+#### 1. Create a Twitch Developer application
+
+1. Go to <https://dev.twitch.tv/console/apps> and click **Register Your Application**.
+2. Fill in a name (e.g. `streamantix-bot`) and set the **OAuth Redirect URL** to
+   `http://localhost:4343/callback` (or whatever you set `TWITCH_REDIRECT_URI` to).
+3. Choose **Chat Bot** as the category, then click **Create**.
+4. Copy the **Client ID** and generate a **Client Secret**.
+
+#### 2. Configure your `.env`
+
+```env
+# Leave TWITCH_TOKEN unset (or remove it entirely)
+TWITCH_CLIENT_ID=<your_client_id>
+TWITCH_CLIENT_SECRET=<your_client_secret>
+TWITCH_REDIRECT_URI=http://localhost:4343/callback
+TWITCH_SCOPES=chat:read chat:edit
+TWITCH_TOKEN_PATH=.secrets/twitch_tokens.json
+TWITCH_CHANNEL=your_channel_name
+```
+
+#### 3. First-time login
+
+Run the dedicated login command once:
+
+```bash
+poetry run python main.py auth-login
+```
+
+This will:
+1. Print an authorization URL — open it in your browser.
+2. Start a temporary local HTTP server on port 4343.
+3. After you click **Authorize** on the Twitch page, capture the code and
+   exchange it for an `access_token` + `refresh_token`.
+4. Save the tokens to `.secrets/twitch_tokens.json` (automatically gitignored).
+
+#### 4. Normal startup
+
+```bash
+poetry run python main.py
+```
+
+On each start the bot:
+- Loads the stored token.
+- Uses it if still valid (more than 5 minutes remaining).
+- Refreshes it automatically if it is near expiry or expired.
+- Falls back to the full login flow only if the refresh token is also invalid.
+
+The `.secrets/` directory is gitignored to prevent accidentally committing tokens.
 
 3. **Download the word embedding model**
 
@@ -287,16 +362,21 @@ the same purpose for local development.
 All variables are documented in `.env.example`. The table below summarises the
 most important ones:
 
-| Variable           | Description                                               | Default |
-|--------------------|-----------------------------------------------------------|---------|
-| `TWITCH_TOKEN`     | Twitch OAuth token (`oauth:…`) — **required**             | —       |
-| `TWITCH_CHANNEL`   | Twitch channel name to join — **required**                | —       |
-| `COMMAND_PREFIX`   | Prefix for bot commands                                   | `!sx`   |
-| `COOLDOWN`         | Cooldown between guesses (seconds)                        | `5`     |
-| `DIFFICULTY`       | Game difficulty (`easy` / `hard`)                         | `easy`  |
-| `MODEL_PATH`       | Path to the Word2Vec binary model inside the container    | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
-| `OVERLAY_ENABLED`  | Set to `true` to start the web overlay server             | `false` |
-| `OVERLAY_PORT`     | TCP port for the overlay HTTP/WebSocket server            | `8080`  |
+| Variable               | Description                                               | Default |
+|------------------------|-----------------------------------------------------------|---------|
+| `TWITCH_TOKEN`         | Manual OAuth token (`oauth:…`) — optional if using OAuth flow | —   |
+| `TWITCH_CHANNEL`       | Twitch channel name to join — **required**                | —       |
+| `TWITCH_CLIENT_ID`     | Twitch app client ID (OAuth flow)                         | —       |
+| `TWITCH_CLIENT_SECRET` | Twitch app client secret (OAuth flow)                     | —       |
+| `TWITCH_REDIRECT_URI`  | OAuth redirect URI                                        | `http://localhost:4343/callback` |
+| `TWITCH_SCOPES`        | Space-separated OAuth scopes                              | `chat:read chat:edit` |
+| `TWITCH_TOKEN_PATH`    | Path to the JSON token storage file                       | `.secrets/twitch_tokens.json` |
+| `COMMAND_PREFIX`       | Prefix for bot commands                                   | `!sx`   |
+| `COOLDOWN`             | Cooldown between guesses (seconds)                        | `5`     |
+| `DIFFICULTY`           | Game difficulty (`easy` / `hard`)                         | `easy`  |
+| `MODEL_PATH`           | Path to the Word2Vec binary model inside the container    | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+| `OVERLAY_ENABLED`      | Set to `true` to start the web overlay server             | `false` |
+| `OVERLAY_PORT`         | TCP port for the overlay HTTP/WebSocket server            | `8080`  |
 
 ### Troubleshooting
 
@@ -311,6 +391,8 @@ most important ones:
 
 ```
 streamantix/
+├── auth/              # Twitch OAuth Authorization Code flow
+│   └── twitch_auth.py # TokenManager: login, refresh, storage
 ├── bot/               # Twitch bot integration
 │   ├── bot.py         # Bot definition and commands
 │   └── cooldown.py    # Per-user cooldown logic
