@@ -1,17 +1,12 @@
-version: '3.7'
-
 services:
   streamantix:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    build: .
+    env_file:
+      - .env
     volumes:
       - ./models:/app/models
       - ./.secrets:/app/.secrets
     ports:
-      - "4343:4343"
-    environment:
-      TWITCH_TOKEN_PATH: /app/.secrets/twitch_tokens.json
-
-volumes:
-  models:
+      - "${OVERLAY_PORT:-8080}:${OVERLAY_PORT:-8080}"
+      - "${OAUTH_CALLBACK_PORT:-4343}:4343"
+    restart: unless-stopped

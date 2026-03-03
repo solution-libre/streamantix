@@ -305,15 +305,40 @@ Create a `.env` file from the example (see [Setup](#setup)), then:
 docker run --rm \
   --env-file .env \
   -v "$(pwd)/models:/app/models" \
+  -v "$(pwd)/.secrets:/app/.secrets" \
+  -p 4343:4343 \
   -p 8080:8080 \
   streamantix
 ```
 
-- The `-v` flag mounts a local `models/` directory into the container so the
+- The first `-v` flag mounts a local `models/` directory into the container so the
   Word2Vec model is downloaded once and persisted across restarts.
+- The second `-v` flag mounts `.secrets/` so OAuth tokens are persisted across restarts.
+- The `-p 4343:4343` flag exposes the OAuth callback server (required for the first-time login flow).
 - The `-p 8080:8080` flag is only necessary when `OVERLAY_ENABLED=true`.
 - On the first run the model (~1 GB) is downloaded automatically. Subsequent
   starts skip the download if the file is already present in the mounted volume.
+
+### First-time OAuth login inside Docker
+
+When using the OAuth Authorization Code flow, the bot needs to complete an
+interactive browser-based login on the first run. Use `docker compose run` with
+the `--service-ports` flag so that port 4343 is accessible from your host:
+
+```bash
+docker compose run --service-ports streamantix python main.py auth-login
+```
+
+This starts a temporary local HTTP server inside the container on port 4343,
+which is forwarded to your host. Open the printed authorization URL in your
+browser, click **Authorize**, and the tokens will be saved to
+`.secrets/twitch_tokens.json` on the host (via the mounted volume).
+
+After the first login, start the bot normally:
+
+```bash
+docker compose up
+```
 
 ### Run with Docker Compose
 
@@ -321,8 +346,9 @@ docker run --rm \
 docker compose up
 ```
 
-Docker Compose reads your `.env` file automatically, mounts `./models` as a
-persistent volume, and exposes the overlay port (default `8080`).
+Docker Compose reads your `.env` file automatically, mounts `./models` and `./.secrets`
+as persistent volumes, exposes the overlay port (default `8080`), and the OAuth
+callback port (default `4343`).
 
 To rebuild the image after code changes:
 
@@ -338,23 +364,25 @@ docker compose logs -f   # stream logs
 docker compose down      # stop and remove the container
 ```
 
-### Persistent model storage
+### Persistent storage
 
-The container writes the Word2Vec model to `/app/models` inside the container.
-Mount a host directory or a named Docker volume at that path so the model
-survives container restarts:
+The container writes the Word2Vec model to `/app/models` and OAuth tokens to
+`/app/.secrets` inside the container. Mount host directories at those paths so
+data survives container restarts:
 
 ```bash
-# Named Docker volume (recommended for production)
+# Named Docker volumes (recommended for production)
 docker volume create streamantix-models
+docker volume create streamantix-secrets
 docker run --rm \
   --env-file .env \
   -v streamantix-models:/app/models \
+  -v streamantix-secrets:/app/.secrets \
   streamantix
 ```
 
-With Docker Compose the `./models` bind-mount in `docker-compose.yml` serves
-the same purpose for local development.
+With Docker Compose the `./models` and `./.secrets` bind-mounts in `compose.yaml`
+serve the same purpose for local development.
 
 ### Environment variables
 
@@ -367,24 +395,26 @@ most important ones:
 | `TWITCH_CHANNEL`       | Twitch channel name to join — **required**                | —       |
 | `TWITCH_CLIENT_ID`     | Twitch app client ID (OAuth flow)                         | —       |
 | `TWITCH_CLIENT_SECRET` | Twitch app client secret (OAuth flow)                     | —       |
-| `TWITCH_REDIRECT_URI`  | OAuth redirect URI                                        | `http://localhost:4343/callback` |
-| `TWITCH_SCOPES`        | Space-separated OAuth scopes                              | `chat:read chat:edit` |
-| `TWITCH_TOKEN_PATH`    | Path to the JSON token storage file                       | `.secrets/twitch_tokens.json` |
-| `COMMAND_PREFIX`       | Prefix for bot commands                                   | `!sx`   |
-| `COOLDOWN`             | Cooldown between guesses (seconds)                        | `5`     |
-| `DIFFICULTY`           | Game difficulty (`easy` / `hard`)                         | `easy`  |
-| `MODEL_PATH`           | Path to the Word2Vec binary model inside the container    | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
-| `OVERLAY_ENABLED`      | Set to `true` to start the web overlay server             | `false` |
-| `OVERLAY_PORT`         | TCP port for the overlay HTTP/WebSocket server            | `8080`  |
+| `TWITCH_REDIRECT_URI`  | OAuth redirect URI — set to `http://localhost:4343/callback` for local Docker | `http://localhost:4343/callback` |
+| `TWITCH_SCOPES`        | Space-separated OAuth scopes                                              | `chat:read chat:edit` |
+| `TWITCH_TOKEN_PATH`    | Path to the JSON token storage file inside the container                  | `.secrets/twitch_tokens.json` |
+| `COMMAND_PREFIX`       | Prefix for bot commands                                                   | `!sx`   |
+| `COOLDOWN`             | Cooldown between guesses (seconds)                                        | `5`     |
+| `DIFFICULTY`           | Game difficulty (`easy` / `hard`)                                         | `easy`  |
+| `MODEL_PATH`           | Path to the Word2Vec binary model inside the container                    | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+| `OVERLAY_ENABLED`      | Set to `true` to start the web overlay server                             | `false` |
+| `OVERLAY_PORT`         | TCP port for the overlay HTTP/WebSocket server                            | `8080`  |
+| `OAUTH_CALLBACK_PORT`  | Host-side port mapped to the container's OAuth callback server (port 4343) | `4343` |
 
 ### Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---------|-------------|-----|
-| Container exits immediately with *"Required environment variable … is not set"* | `.env` file not passed or incomplete | Add `--env-file .env` to `docker run`, or verify all required variables in `docker-compose.yml` |
+| Container exits immediately with *"Required environment variable … is not set"* | `.env` file not passed or incomplete | Add `--env-file .env` to `docker run`, or verify all required variables in `compose.yaml` |
 | Model download fails / times out | No internet access from the container | Ensure outbound HTTPS is allowed, or pre-download the model and place it in the mounted `models/` directory |
-| Overlay not reachable from OBS | Port not published | Add `-p 8080:8080` to `docker run` or uncomment the port in `docker-compose.yml`; check firewall rules |
-| Permission denied writing to `models/` | Volume mounted as read-only or wrong ownership | Ensure the host directory is writable by UID 1000 (`chown -R 1000:1000 ./models`) |
+| Overlay not reachable from OBS | Port not published | Add `-p 8080:8080` to `docker run` or check the port mapping in `compose.yaml`; check firewall rules |
+| OAuth callback not reachable | Port 4343 not published | Add `-p 4343:4343` to `docker run`, or set `OAUTH_CALLBACK_PORT` in your `.env` to customise the host port used by both `docker compose up` and `docker compose run --service-ports` |
+| Permission denied writing to `models/` or `.secrets/` | Volume mounted as read-only or wrong ownership | Ensure the host directories are writable by UID 1000 (`chown -R 1000:1000 ./models ./.secrets`) |
 
 ## Project Structure
 
