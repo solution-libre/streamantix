@@ -50,8 +50,7 @@ There are two ways to authenticate the bot with Twitch.
 
 ### Option A — Manual token (quick start)
 
-Set `TWITCH_TOKEN` to an OAuth token you generate manually (e.g. via
-<https://twitchapps.com/tmi/>):
+Set `TWITCH_TOKEN` to an OAuth token you generate manually:
 
 ```env
 TWITCH_TOKEN=oauth:xxxxxxxxxx
