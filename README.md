@@ -326,7 +326,7 @@ interactive browser-based login on the first run. Use `docker compose run` with
 the `--service-ports` flag so that port 4343 is accessible from your host:
 
 ```bash
-docker compose run --service-ports bot python main.py auth-login
+docker compose run --service-ports streamantix python main.py auth-login
 ```
 
 This starts a temporary local HTTP server inside the container on port 4343,

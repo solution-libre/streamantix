@@ -1,5 +1,5 @@
 services:
-  bot:
+  streamantix:
     build: .
     env_file:
       - .env
