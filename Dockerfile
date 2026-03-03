@@ -21,14 +21,14 @@ RUN poetry install --no-root --without dev
 # Copy the rest of the project
 COPY . .
 
-# Ensure models directory exists, set permissions, and make the entrypoint executable
-RUN mkdir -p models && chmod +x docker-entrypoint.sh && chown -R appuser:appuser /app
+# Ensure models and secrets directories exist, set permissions, and make the entrypoint executable
+RUN mkdir -p models .secrets && chmod +x docker-entrypoint.sh && chown -R appuser:appuser /app
 
 USER appuser
 
-# models/ is downloaded at startup and should be mounted for persistence:
-#   docker run -v /path/to/models:/app/models streamantix
-VOLUME ["/app/models"]
+# models/ is downloaded at startup and .secrets/ stores OAuth tokens; both should be mounted for persistence:
+#   docker run -v /path/to/models:/app/models -v /path/to/.secrets:/app/.secrets streamantix
+VOLUME ["/app/models", "/app/.secrets"]
 
 # Environment variables must be supplied at runtime, e.g.:
 #   docker run --env-file .env streamantix
