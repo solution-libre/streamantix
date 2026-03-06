@@ -4,8 +4,10 @@ FROM python:3.12-slim
 ENV POETRY_VIRTUALENVS_CREATE=false \
     POETRY_NO_INTERACTION=1
 
-# Install Poetry
-RUN pip install --no-cache-dir poetry
+# Install Poetry and gosu (for privilege dropping in the entrypoint)
+RUN apt-get update && apt-get install -y --no-install-recommends gosu \
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir poetry
 
 # Create a non-root user for running the application
 RUN useradd --create-home --shell /bin/bash appuser
@@ -24,7 +26,8 @@ COPY . .
 # Ensure models and secrets directories exist, set permissions, and make the entrypoint executable
 RUN mkdir -p models .secrets && chmod +x docker-entrypoint.sh && chown -R appuser:appuser /app
 
-USER appuser
+# NOTE: USER is intentionally not set here — docker-entrypoint.sh starts as root,
+# fixes ownership of bind-mounted volumes, then drops to appuser via gosu.
 
 # models/ is downloaded at startup and .secrets/ stores OAuth tokens; both should be mounted for persistence:
 #   docker run -v /path/to/models:/app/models -v /path/to/.secrets:/app/.secrets streamantix
