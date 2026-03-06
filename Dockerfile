@@ -2,7 +2,8 @@ FROM python:3.12-slim
 
 # Install directly into the system Python (no virtualenv needed in containers)
 ENV POETRY_VIRTUALENVS_CREATE=false \
-    POETRY_NO_INTERACTION=1
+    POETRY_NO_INTERACTION=1 \
+    PYTHONUNBUFFERED=1
 
 # Install Poetry and gosu (for privilege dropping in the entrypoint)
 RUN apt-get update && apt-get install -y --no-install-recommends gosu \

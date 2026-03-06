@@ -90,9 +90,10 @@ class StreamantixBot(commands.Bot):
         on_state_change: Callable[[dict[str, Any]], Awaitable[None]] | None = kwargs.pop(  # type: ignore[assignment]
             "on_state_change", None
         )
+        scorer = kwargs.pop("scorer", None)  # type: ignore[assignment]
         self._command_prefix: str = initial_prefix
         self._cooldown = GlobalCooldown(int(initial_cooldown))
-        self._game_state = GameState()
+        self._game_state = GameState(scorer=scorer)  # type: ignore[arg-type]
         self._on_state_change = on_state_change
         self._next_difficulty: Difficulty = Difficulty.EASY
         super().__init__(prefix=lambda bot, msg: bot._command_prefix, **kwargs)

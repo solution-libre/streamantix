@@ -4,6 +4,7 @@ import asyncio
 import sys
 
 from bot.bot import StreamantixBot
+from game.engine import SemanticEngine
 import config
 
 
@@ -72,6 +73,11 @@ def main() -> None:
 
     token = _resolve_token()
 
+    print("Loading Word2Vec model…")
+    engine = SemanticEngine(model_path=config.MODEL_PATH)
+    engine.load()
+    print("Model loaded.")
+
     if config.OVERLAY_ENABLED:
         from overlay.server import OverlayServer
 
@@ -83,6 +89,7 @@ def main() -> None:
                 cooldown=config.COOLDOWN,
                 initial_channels=[config.TWITCH_CHANNEL],
                 on_state_change=overlay.broadcast,
+                scorer=engine,
             )
             await asyncio.gather(bot.start(), overlay.serve())
 
@@ -93,6 +100,7 @@ def main() -> None:
             prefix=config.COMMAND_PREFIX,
             cooldown=config.COOLDOWN,
             initial_channels=[config.TWITCH_CHANNEL],
+            scorer=engine,
         )
         bot.run()
 
