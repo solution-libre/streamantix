@@ -187,7 +187,28 @@ class TestGetToken:
         manager = _make_manager(tmp_path)
         data = _make_token_data(expires_delta=3600)
         manager.save_tokens(data)
-        assert manager.get_token() == "tok_abc"
+        with patch.object(manager, "_validate_with_twitch", return_value=True):
+            assert manager.get_token() == "tok_abc"
+
+    def test_relogins_when_token_revoked_by_twitch(self, tmp_path):
+        manager = _make_manager(tmp_path)
+        data = _make_token_data(expires_delta=3600)
+        manager.save_tokens(data)
+
+        refreshed = {
+            "access_token": "refreshed_tok",
+            "refresh_token": "new_ref",
+            "expires_in": 14400,
+            "scope": [],
+            "token_type": "bearer",
+        }
+        with (
+            patch.object(manager, "_validate_with_twitch", return_value=False),
+            patch.object(manager, "_post", return_value=refreshed),
+        ):
+            token = manager.get_token()
+
+        assert token == "refreshed_tok"
 
     def test_refreshes_near_expiry_token(self, tmp_path):
         manager = _make_manager(tmp_path)

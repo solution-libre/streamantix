@@ -425,7 +425,7 @@ class TestHelpCommand:
 # start command
 # ---------------------------------------------------------------------------
 
-_start_fn = StreamantixBot.start._callback
+_start_fn = StreamantixBot.start_game._callback
 
 
 class TestStartPermissions:
