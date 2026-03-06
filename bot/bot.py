@@ -122,8 +122,8 @@ class StreamantixBot(commands.Bot):
         """
         await ctx.send(_HELP_TEXT)
 
-    @commands.command()
-    async def start(self, ctx: commands.Context, difficulty: str = "") -> None:
+    @commands.command(name="start")
+    async def start_game(self, ctx: commands.Context, difficulty: str = "") -> None:
         """Start a new game round (broadcaster only).
 
         Usage: <prefix> start [easy|medium|hard]

@@ -12,6 +12,7 @@ from typing import Any
 
 TWITCH_AUTH_URL = "https://id.twitch.tv/oauth2/authorize"
 TWITCH_TOKEN_URL = "https://id.twitch.tv/oauth2/token"
+TWITCH_VALIDATE_URL = "https://id.twitch.tv/oauth2/validate"
 
 # Refresh when less than this many seconds remain before expiry.
 _REFRESH_BUFFER_SECONDS = 300
@@ -79,6 +80,16 @@ class TokenManager:
         req.add_header("Content-Type", "application/x-www-form-urlencoded")
         with urllib.request.urlopen(req) as resp:  # noqa: S310
             return json.loads(resp.read().decode())  # type: ignore[no-any-return]
+
+    def _validate_with_twitch(self, access_token: str) -> bool:
+        """Return True if the token is accepted by the Twitch validate endpoint."""
+        req = urllib.request.Request(TWITCH_VALIDATE_URL)
+        req.add_header("Authorization", f"OAuth {access_token}")
+        try:
+            with urllib.request.urlopen(req) as resp:  # noqa: S310
+                return resp.status == 200
+        except urllib.error.HTTPError:
+            return False
 
     # ------------------------------------------------------------------
     # Token exchange / refresh
@@ -192,14 +203,18 @@ class TokenManager:
         """Return a valid access token, refreshing or re-logging-in as needed."""
         tokens = self.load_tokens()
         if tokens and self.is_valid(tokens):
-            return tokens["access_token"]
+            if self._validate_with_twitch(tokens["access_token"]):
+                return tokens["access_token"]
+            print("Stored token rejected by Twitch (revoked?). Attempting refresh…")
 
-        if tokens and self.needs_refresh(tokens):
+        if tokens and tokens.get("refresh_token"):
             try:
                 tokens = self.refresh_token(tokens["refresh_token"])
                 self.save_tokens(tokens)
                 return tokens["access_token"]
             except Exception as exc:
                 print(f"Token refresh failed ({exc}). Re-authenticating…")
+
+        return self.login()
 
         return self.login()

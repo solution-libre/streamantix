@@ -1,4 +1,4 @@
-# streamantix
+# Streamantix
 
 Twitch chat bot to play a Cemantix-like semantic word guessing game.
 
@@ -105,6 +105,7 @@ poetry run python main.py
 ```
 
 On each start the bot:
+
 - Loads the stored token.
 - Uses it if still valid (more than 5 minutes remaining).
 - Refreshes it automatically if it is near expiry or expired.
@@ -169,7 +170,7 @@ All commands are prefixed with the configured `COMMAND_PREFIX` (default: `!sx`).
 
 ### Examples
 
-```
+```text
 !sx help
 !sx start
 !sx start hard
@@ -204,7 +205,7 @@ You can configure a different prefix to avoid conflicts with other bots in the c
 
 Set `COMMAND_PREFIX` in your `.env` file before starting the bot:
 
-```
+```env
 COMMAND_PREFIX=?sx
 ```
 
@@ -212,7 +213,7 @@ COMMAND_PREFIX=?sx
 
 Use the `setprefix` command in Twitch chat:
 
-```
+```text
 !sx setprefix ?sx
 ```
 
@@ -250,7 +251,7 @@ It displays live game information: best guess, last guess, attempt count, top-10
 1. In OBS, add a new **Browser Source**.
 2. Set the URL to:
 
-   ```
+   ```text
    http://localhost:8080/overlay
    ```
 
@@ -275,8 +276,6 @@ It displays live game information: best guess, last guess, attempt count, top-10
 - If OBS is on the same machine as the bot, use `localhost`.
 - If running across machines, ensure the firewall allows inbound TCP on `OVERLAY_PORT`.
 - The overlay page auto-reconnects every 3 seconds if the WebSocket drops.
-
-
 
 ## Running
 
@@ -418,7 +417,7 @@ most important ones:
 
 ## Project Structure
 
-```
+```text
 streamantix/
 ├── auth/              # Twitch OAuth Authorization Code flow
 │   └── twitch_auth.py # TokenManager: login, refresh, storage

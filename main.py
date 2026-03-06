@@ -16,7 +16,21 @@ def _resolve_token() -> str:
     3. Full OAuth login flow (browser redirect).
     """
     if config.TWITCH_TOKEN:
-        return config.TWITCH_TOKEN
+        from auth.twitch_auth import TokenManager, TWITCH_VALIDATE_URL
+        import urllib.request
+
+        req = urllib.request.Request(TWITCH_VALIDATE_URL)
+        req.add_header("Authorization", f"OAuth {config.TWITCH_TOKEN}")
+        try:
+            with urllib.request.urlopen(req) as resp:  # noqa: S310
+                if resp.status == 200:
+                    return config.TWITCH_TOKEN
+        except Exception:
+            pass
+        raise RuntimeError(
+            "TWITCH_TOKEN is set but was rejected by Twitch "
+            "(expired or revoked). Remove it or set a valid token."
+        )
 
     if not config.TWITCH_CLIENT_ID or not config.TWITCH_CLIENT_SECRET:
         raise RuntimeError(
@@ -61,16 +75,15 @@ def main() -> None:
     if config.OVERLAY_ENABLED:
         from overlay.server import OverlayServer
 
-        overlay = OverlayServer(host="0.0.0.0", port=config.OVERLAY_PORT)
-        bot = StreamantixBot(
-            token=token,
-            prefix=config.COMMAND_PREFIX,
-            cooldown=config.COOLDOWN,
-            initial_channels=[config.TWITCH_CHANNEL],
-            on_state_change=overlay.broadcast,
-        )
-
         async def _run() -> None:
+            overlay = OverlayServer(host="0.0.0.0", port=config.OVERLAY_PORT)
+            bot = StreamantixBot(
+                token=token,
+                prefix=config.COMMAND_PREFIX,
+                cooldown=config.COOLDOWN,
+                initial_channels=[config.TWITCH_CHANNEL],
+                on_state_change=overlay.broadcast,
+            )
             await asyncio.gather(bot.start(), overlay.serve())
 
         asyncio.run(_run())

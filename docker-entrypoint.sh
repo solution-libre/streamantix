@@ -8,6 +8,11 @@ if [ "$(id -u)" = "0" ]; then
     exec gosu appuser /app/docker-entrypoint.sh "$@"
 fi
 
-# Download the Word2Vec model if it is not already present, then start the bot.
-python download_model.py
-exec python main.py
+# Skip the download for the auth-login command (no model needed).
+case " $* " in
+    *" auth-login "*|*" auth-login") ;;
+    # Download the Word2Vec model if it is not already present, then start the bot.
+    *) python download_model.py ;;
+esac
+
+exec "$@"

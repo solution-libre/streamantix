@@ -36,3 +36,4 @@ VOLUME ["/app/models", "/app/.secrets"]
 # Environment variables must be supplied at runtime, e.g.:
 #   docker run --env-file .env streamantix
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["python", "main.py"]
