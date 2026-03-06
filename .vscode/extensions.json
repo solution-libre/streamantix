@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "docker.docker",
+        "ymotongpoo.licenser",
+        "mikestead.dotenv",
+        "davidanson.vscode-markdownlint",
+        "github.vscode-github-actions",
+        "ms-python.python"
+    ]
+}
