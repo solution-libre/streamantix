@@ -195,6 +195,12 @@ class StreamantixBot(commands.Bot):
 
         if result.is_found:
             await ctx.send(f"🎉 {ctx.author.name} found the word '{word}'!")
+        elif result.already_cited:
+            if result.entry.score is not None:
+                pct = int(result.entry.score * 100)
+                await ctx.send(f"'{word}' has already been suggested ({pct}% similarity).")
+            else:
+                await ctx.send(f"'{word}' has already been suggested.")
         elif result.entry.score is not None:
             pct = int(result.entry.score * 100)
             await ctx.send(f"'{word}': {pct}% similarity")
