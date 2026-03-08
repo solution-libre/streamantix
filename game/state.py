@@ -55,10 +55,13 @@ class GuessResult:
     Attributes:
         entry: The :class:`GuessEntry` that was recorded.
         is_found: ``True`` if this guess matched the target word.
+        already_cited: ``True`` if the same word had already been submitted
+            earlier in this round (by any player).
     """
 
     entry: GuessEntry
     is_found: bool
+    already_cited: bool
 
 
 class GameState:
@@ -118,6 +121,7 @@ class GameState:
         normalized = clean_word(word)
         target_normalized = clean_word(self._target_word)
 
+        already_cited = any(e.normalized_word == normalized for e in self._history)
         found = normalized == target_normalized
 
         score: float | None
@@ -134,12 +138,13 @@ class GameState:
             normalized_word=normalized,
             score=score,
         )
-        self._history.append(entry)
+        if not already_cited:
+            self._history.append(entry)
 
         if found:
             self._is_found = True
 
-        return GuessResult(entry=entry, is_found=found)
+        return GuessResult(entry=entry, is_found=found, already_cited=already_cited)
 
     # ------------------------------------------------------------------
     # State inspection

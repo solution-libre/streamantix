@@ -374,6 +374,53 @@ class TestGuessRouting:
         message = ctx.send.call_args[0][0]
         assert "vocabulary" in message.lower()
 
+    async def test_guess_already_cited_word_with_score_sends_distinct_message(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FakeScorer())
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        # First submission of "chien"
+        await _guess_fn(bot, ctx, "chien")
+        # Second submission of the same word
+        ctx2 = _make_ctx()
+        ctx2.author.name = "bob"
+        await _guess_fn(bot, ctx2, "chien")
+        message = ctx2.send.call_args[0][0]
+        assert "already" in message.lower()
+        assert "%" in message
+
+    async def test_guess_already_cited_word_without_score_sends_distinct_message(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        # No scorer, so non-exact guess produces score=None
+        await _guess_fn(bot, ctx, "unknownword")
+        ctx2 = _make_ctx()
+        ctx2.author.name = "bob"
+        await _guess_fn(bot, ctx2, "unknownword")
+        message = ctx2.send.call_args[0][0]
+        assert "already" in message.lower()
+
+    async def test_guess_exact_match_not_reported_as_already_cited(self):
+        """A winning guess should show the win message even if the word was cited before."""
+        bot = _make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FakeScorer())
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        # Someone submits the winning word first (game won)
+        await _guess_fn(bot, ctx, "chat")
+        # Another user submits the same winning word again
+        ctx2 = _make_ctx()
+        ctx2.author.name = "bob"
+        await _guess_fn(bot, ctx2, "chat")
+        message = ctx2.send.call_args[0][0]
+        # Should show winner message, not "already cited"
+        assert "bob" in message.lower()
+        assert "chat" in message.lower()
+
 
 # ---------------------------------------------------------------------------
 # event_error
