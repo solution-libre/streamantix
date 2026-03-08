@@ -138,7 +138,8 @@ class GameState:
             normalized_word=normalized,
             score=score,
         )
-        self._history.append(entry)
+        if not already_cited:
+            self._history.append(entry)
 
         if found:
             self._is_found = True

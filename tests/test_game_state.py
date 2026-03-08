@@ -202,13 +202,13 @@ class TestAlreadyCited:
         result = gs.submit_guess("bob", "CHIEN")
         assert result.already_cited
 
-    def test_already_cited_word_still_appended_to_history(self):
-        """Even already-cited guesses should be recorded in history."""
+    def test_already_cited_word_not_appended_to_history(self):
+        """Already-cited guesses should not be recorded again in history."""
         gs = _make_state()
         gs.start_new_game("chat", Difficulty.EASY)
         gs.submit_guess("alice", "chien")
         gs.submit_guess("bob", "chien")
-        assert gs.attempt_count == 2
+        assert gs.attempt_count == 1
 
     def test_already_cited_resets_on_new_game(self):
         """After starting a new game, previously cited words are no longer cited."""
@@ -247,9 +247,19 @@ class TestGameStateLeaderboard:
         """top_guesses(n) should return at most n entries."""
         gs = _make_state(with_scorer=True)
         gs.start_new_game("chat", Difficulty.EASY)
-        for i in range(5):
-            gs.submit_guess(f"user{i}", "ch")
+        for word in ["a", "ab", "abc", "abcd", "abcde"]:
+            gs.submit_guess("alice", word)
         assert len(gs.top_guesses(n=3)) == 3
+
+    def test_already_cited_word_excluded_from_top_guesses(self):
+        """A word submitted a second time should not appear twice in the leaderboard."""
+        gs = _make_state(with_scorer=True)
+        gs.start_new_game("chat", Difficulty.EASY)
+        gs.submit_guess("alice", "chien")
+        gs.submit_guess("bob", "chien")
+        top = gs.top_guesses()
+        normalized_words = [e.normalized_word for e in top]
+        assert normalized_words.count("chien") == 1
 
     def test_score_stored_in_entry_with_scorer(self):
         """When a scorer is provided, GuessEntry.score should be set."""
