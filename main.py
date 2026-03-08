@@ -83,6 +83,7 @@ def main() -> None:
 
         async def _run() -> None:
             overlay = OverlayServer(host="0.0.0.0", port=config.OVERLAY_PORT)
+            print(f"Overlay available at http://localhost:{config.OVERLAY_PORT}/overlay")
             bot = StreamantixBot(
                 token=token,
                 prefix=config.COMMAND_PREFIX,
