@@ -88,6 +88,12 @@
     }
 
     /* Last guess */
+    #last-label {
+      font-size: 10px;
+      color: #aaa;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
     #last-row {
       display: flex;
       justify-content: space-between;
@@ -150,14 +156,15 @@
 
     <div id="target-row"></div>
 
+    <div id="last-row">
+      <span id="last-label">Last guess</span>
+      <span id="last-word">—</span>
+      <span id="last-meta"></span>
+    </div>
+
     <div id="gauge-row">
       <span id="gauge-label">Best score</span>
       <div id="gauge-bar-bg"><div id="gauge-bar"></div></div>
-    </div>
-
-    <div id="last-row">
-      <span id="last-word">—</span>
-      <span id="last-meta"></span>
     </div>
 
     <div id="top-section">
