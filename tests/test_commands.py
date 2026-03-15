@@ -404,7 +404,7 @@ class TestGuessRouting:
         assert "already" in message.lower()
 
     async def test_guess_exact_match_not_reported_as_already_cited(self):
-        """A winning guess should show the win message even if the word was cited before."""
+        """Re-guessing the winning word after game is won should show an already-found message."""
         bot = _make_bot(cooldown=0)
         bot._game_state = GameState(scorer=_FakeScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
@@ -417,9 +417,11 @@ class TestGuessRouting:
         ctx2.author.name = "bob"
         await _guess_fn(bot, ctx2, "chat")
         message = ctx2.send.call_args[0][0]
-        # Should show winner message, not "already cited"
-        assert "bob" in message.lower()
+        # Should show "already found by alice" message, not "already cited" or a new win
+        assert "alice" in message.lower()
         assert "chat" in message.lower()
+        assert "bob" not in message.lower()
+
 
 
 # ---------------------------------------------------------------------------
