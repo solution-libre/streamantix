@@ -9,7 +9,7 @@ from typing import Any
 
 from twitchio.ext import commands
 
-from bot.cooldown import GlobalCooldown
+from bot.cooldown import CooldownManager
 from game.state import Difficulty, GameState
 from game.word_utils import load_word_list
 
@@ -92,7 +92,7 @@ class StreamantixBot(commands.Bot):
         )
         scorer = kwargs.pop("scorer", None)  # type: ignore[assignment]
         self._command_prefix: str = initial_prefix
-        self._cooldown = GlobalCooldown(int(initial_cooldown))
+        self._cooldown = CooldownManager(int(initial_cooldown))
         self._game_state = GameState(scorer=scorer)  # type: ignore[arg-type]
         self._on_state_change = on_state_change
         self._next_difficulty: Difficulty = Difficulty.EASY
@@ -170,14 +170,14 @@ class StreamantixBot(commands.Bot):
 
         Usage: <prefix> guess <word>
         """
-        if self._cooldown.is_on_cooldown():
-            remaining = math.ceil(self._cooldown.remaining())
+        if self._cooldown.is_on_cooldown(ctx.author.name):
+            remaining = math.ceil(self._cooldown.remaining(ctx.author.name))
             await ctx.send(
                 f"Please wait {remaining} seconds before guessing again."
             )
             return
 
-        self._cooldown.record()
+        self._cooldown.record(ctx.author.name)
 
         if not word:
             await ctx.send("Please provide a word to guess.")

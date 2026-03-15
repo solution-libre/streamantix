@@ -4,7 +4,7 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from bot.bot import StreamantixBot, _validate_prefix, _validate_cooldown, _validate_difficulty
-from bot.cooldown import GlobalCooldown
+from bot.cooldown import CooldownManager
 from game.state import Difficulty, GameState
 
 
@@ -16,7 +16,7 @@ def _make_bot(prefix: str = "!sx", cooldown: int = 5) -> StreamantixBot:
     """Return a StreamantixBot instance without connecting to Twitch."""
     bot = object.__new__(StreamantixBot)
     bot._command_prefix = prefix
-    bot._cooldown = GlobalCooldown(cooldown)
+    bot._cooldown = CooldownManager(cooldown)
     bot._game_state = GameState()
     bot._next_difficulty = Difficulty.EASY
     return bot
@@ -284,8 +284,9 @@ _guess_fn = StreamantixBot.guess._callback
 class TestGuessCooldownEnforcement:
     async def test_guess_blocked_during_cooldown(self):
         bot = _make_bot(cooldown=30)
-        bot._cooldown.record()  # simulate a recent guess
         ctx = _make_ctx()
+        ctx.author.name = "alice"
+        bot._cooldown.record("alice")  # simulate a recent guess by this user
         await _guess_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "wait" in message.lower()
@@ -293,6 +294,7 @@ class TestGuessCooldownEnforcement:
     async def test_guess_allowed_when_not_on_cooldown(self):
         bot = _make_bot(cooldown=0)
         ctx = _make_ctx()
+        ctx.author.name = "alice"
         await _guess_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "wait" not in message.lower()
@@ -300,17 +302,34 @@ class TestGuessCooldownEnforcement:
     async def test_guess_records_cooldown(self):
         bot = _make_bot(cooldown=30)
         ctx = _make_ctx()
-        assert not bot._cooldown.is_on_cooldown()
+        ctx.author.name = "alice"
+        assert not bot._cooldown.is_on_cooldown("alice")
         await _guess_fn(bot, ctx)
-        assert bot._cooldown.is_on_cooldown()
+        assert bot._cooldown.is_on_cooldown("alice")
 
     async def test_blocked_guess_message_mentions_seconds(self):
         bot = _make_bot(cooldown=30)
-        bot._cooldown.record()
         ctx = _make_ctx()
+        ctx.author.name = "alice"
+        bot._cooldown.record("alice")
         await _guess_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "second" in message.lower()
+
+    async def test_different_users_have_independent_cooldowns(self):
+        """One user being on cooldown must not block another user."""
+        bot = _make_bot(cooldown=30)
+        ctx_alice = _make_ctx()
+        ctx_alice.author.name = "alice"
+        ctx_bob = _make_ctx()
+        ctx_bob.author.name = "bob"
+        bot._cooldown.record("alice")  # only alice is on cooldown
+        assert bot._cooldown.is_on_cooldown("alice")
+        assert not bot._cooldown.is_on_cooldown("bob")
+        # Bob should be allowed to guess despite alice being on cooldown
+        await _guess_fn(bot, ctx_bob)
+        message = ctx_bob.send.call_args[0][0]
+        assert "wait" not in message.lower()
 
 
 # ---------------------------------------------------------------------------
