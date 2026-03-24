@@ -383,6 +383,27 @@ class TestGuessRouting:
         message = ctx.send.call_args[0][0]
         assert "%" in message
 
+    async def test_guess_percentage_uses_rounding_not_truncation(self):
+        """Chat must show the same rounded percentage as the overlay (Math.round)."""
+
+        class _RoundingScorer:
+            """Returns 0.475 so that truncation gives 47% but rounding gives 48%."""
+
+            def score_guess(self, guess: str, target: str) -> float | None:
+                from game.word_utils import clean_word
+                if clean_word(guess) == clean_word(target):
+                    return 1.0
+                return 0.475
+
+        bot = _make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_RoundingScorer())
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        await _guess_fn(bot, ctx, "chien")
+        message = ctx.send.call_args[0][0]
+        assert "48%" in message, f"Expected 48% (rounded), got: {message}"
+
     async def test_guess_unknown_word_reports_vocabulary_miss(self):
         bot = _make_bot(cooldown=0)
         bot._game_state.start_new_game("chat", Difficulty.EASY)
