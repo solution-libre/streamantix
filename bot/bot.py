@@ -193,8 +193,11 @@ class StreamantixBot(commands.Bot):
             await ctx.send("No game is currently in progress.")
             return
 
-        if result.is_found:
+        if result.is_found and not result.already_cited:
             await ctx.send(f"🎉 {ctx.author.name} found the word '{word}'!")
+        elif result.is_found and result.already_cited:
+            found_by = self._game_state.found_by
+            await ctx.send(f"🎉 The word '{word}' was already found by {found_by}!")
         elif result.already_cited:
             if result.entry.score is not None:
                 pct = int(result.entry.score * 100)
