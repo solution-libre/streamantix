@@ -2,9 +2,7 @@
 
 import time
 
-import pytest
-
-from bot.cooldown import CooldownManager, GlobalCooldown
+from bot.cooldown import CooldownManager
 
 
 class TestCooldownManagerInit:
@@ -56,61 +54,44 @@ class TestRecord:
         assert mgr.is_on_cooldown("newuser")
 
 
-class TestGlobalCooldownInit:
-    def test_default_not_on_cooldown(self):
-        """A freshly created GlobalCooldown should not be active."""
-        gc = GlobalCooldown(5)
-        assert not gc.is_on_cooldown()
-
-    def test_duration_stored(self):
-        """The cooldown duration should be retrievable via the property."""
-        gc = GlobalCooldown(10)
-        assert gc.duration == 10
-
+class TestCooldownManagerRemaining:
     def test_remaining_zero_when_inactive(self):
-        """remaining() should return 0.0 when no guess has been recorded."""
-        gc = GlobalCooldown(5)
-        assert gc.remaining() == 0.0
-
-
-class TestGlobalCooldownIsOnCooldown:
-    def test_on_cooldown_after_record(self):
-        """GlobalCooldown should be active immediately after record()."""
-        gc = GlobalCooldown(30)
-        gc.record()
-        assert gc.is_on_cooldown()
-
-    def test_not_on_cooldown_after_expiry(self):
-        """GlobalCooldown should be inactive after the cooldown period expires."""
-        gc = GlobalCooldown(0)
-        gc.record()
-        time.sleep(0.01)
-        assert not gc.is_on_cooldown()
+        """remaining() should return 0.0 when the user has not been seen."""
+        mgr = CooldownManager(5)
+        assert mgr.remaining("alice") == 0.0
 
     def test_remaining_positive_during_cooldown(self):
-        """remaining() should return a positive value while on cooldown."""
-        gc = GlobalCooldown(30)
-        gc.record()
-        assert gc.remaining() > 0
+        """remaining() should return a positive value while user is on cooldown."""
+        mgr = CooldownManager(30)
+        mgr.record("alice")
+        assert mgr.remaining("alice") > 0
 
     def test_remaining_never_negative(self):
-        """remaining() should never return a negative value."""
-        gc = GlobalCooldown(0)
-        gc.record()
+        """remaining() should never return a negative value after expiry."""
+        mgr = CooldownManager(0)
+        mgr.record("alice")
         time.sleep(0.01)
-        assert gc.remaining() == 0.0
+        assert mgr.remaining("alice") == 0.0
+
+    def test_remaining_independent_per_user(self):
+        """remaining() for one user should not affect another user."""
+        mgr = CooldownManager(30)
+        mgr.record("alice")
+        assert mgr.remaining("alice") > 0
+        assert mgr.remaining("bob") == 0.0
 
 
-class TestGlobalCooldownSetDuration:
+class TestCooldownManagerSetDuration:
     def test_set_duration_updates_value(self):
         """set_duration() should update the cooldown duration."""
-        gc = GlobalCooldown(5)
-        gc.set_duration(15)
-        assert gc.duration == 15
+        mgr = CooldownManager(5)
+        mgr.set_duration(15)
+        assert mgr.duration == 15
 
     def test_set_duration_zero_disables_cooldown(self):
-        """Setting duration to 0 should disable the cooldown."""
-        gc = GlobalCooldown(30)
-        gc.record()
-        gc.set_duration(0)
-        assert not gc.is_on_cooldown()
+        """Setting duration to 0 should disable the cooldown for a user."""
+        mgr = CooldownManager(30)
+        mgr.record("alice")
+        mgr.set_duration(0)
+        assert not mgr.is_on_cooldown("alice")
+
