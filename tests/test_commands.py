@@ -383,11 +383,37 @@ class TestGuessRouting:
         message = ctx.send.call_args[0][0]
         assert "%" in message
 
-    async def test_guess_percentage_uses_rounding_not_truncation(self):
-        """Chat must show the same rounded percentage as the overlay (Math.round)."""
+    async def test_guess_percentage_uses_floor_not_round(self):
+        """Chat must use floor() so that near-100% percentiles never display as 100%.
 
-        class _RoundingScorer:
-            """Returns 0.475 so that truncation gives 47% but rounding gives 48%."""
+        A scorer returning 0.998 gives round()=100 but floor()=99; floor must be used
+        so that 100% is reserved exclusively for the exact-match win message.
+        """
+
+        class _NearHundredScorer:
+            """Returns 0.998 so that round() gives 100% but floor() gives 99%."""
+
+            def score_guess(self, guess: str, target: str) -> float | None:
+                from game.word_utils import clean_word
+                if clean_word(guess) == clean_word(target):
+                    return 1.0
+                return 0.998
+
+        bot = _make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_NearHundredScorer())
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        await _guess_fn(bot, ctx, "chien")
+        message = ctx.send.call_args[0][0]
+        assert "99%" in message, f"Expected 99% (floor), got: {message}"
+        assert "100%" not in message, f"100% must be reserved for exact matches, got: {message}"
+
+    async def test_guess_percentage_uses_floor_truncation(self):
+        """Floor truncates toward zero: 0.475 * 100 = 47, not 48."""
+
+        class _FloorScorer:
+            """Returns 0.475 so that floor gives 47% but round gives 48%."""
 
             def score_guess(self, guess: str, target: str) -> float | None:
                 from game.word_utils import clean_word
@@ -396,13 +422,13 @@ class TestGuessRouting:
                 return 0.475
 
         bot = _make_bot(cooldown=0)
-        bot._game_state = GameState(scorer=_RoundingScorer())
+        bot._game_state = GameState(scorer=_FloorScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         ctx = _make_ctx()
         ctx.author.name = "alice"
         await _guess_fn(bot, ctx, "chien")
         message = ctx.send.call_args[0][0]
-        assert "48%" in message, f"Expected 48% (rounded), got: {message}"
+        assert "47%" in message, f"Expected 47% (floor), got: {message}"
 
     async def test_guess_unknown_word_reports_vocabulary_miss(self):
         bot = _make_bot(cooldown=0)

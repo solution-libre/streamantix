@@ -200,12 +200,12 @@ class StreamantixBot(commands.Bot):
             await ctx.send(f"🎉 The word '{word}' was already found by {found_by}!")
         elif result.already_cited:
             if result.entry.score is not None:
-                pct = round(result.entry.score * 100)
+                pct = math.floor(result.entry.score * 100)
                 await ctx.send(f"'{word}' has already been suggested ({pct}% similarity).")
             else:
                 await ctx.send(f"'{word}' has already been suggested.")
         elif result.entry.score is not None:
-            pct = round(result.entry.score * 100)
+            pct = math.floor(result.entry.score * 100)
             await ctx.send(f"'{word}': {pct}% similarity")
         else:
             await ctx.send(f"'{word}' is not in the vocabulary.")
@@ -276,7 +276,7 @@ class StreamantixBot(commands.Bot):
             return
 
         parts = [
-            f"{i + 1}. {e.raw_word} ({round((e.score or 0.0) * 100)}%)"
+            f"{i + 1}. {e.raw_word} ({math.floor((e.score or 0.0) * 100)}%)"
             for i, e in enumerate(top)
         ]
         await ctx.send("Top guesses: " + " | ".join(parts))
@@ -303,7 +303,7 @@ class StreamantixBot(commands.Bot):
         top = self._game_state.top_guesses(1)
         if top:
             best = top[0]
-            pct = round((best.score or 0.0) * 100)
+            pct = math.floor((best.score or 0.0) * 100)
             await ctx.send(
                 f"Game in progress. {attempts} attempt(s). "
                 f"Best guess: '{best.raw_word}' ({pct}%)."
