@@ -45,6 +45,7 @@ class OverlayServer:
         self.host = host
         self.port = port
         self._clients: set[WebSocket] = set()
+        self._last_state: dict[str, Any] | None = None
         self._app = Starlette(
             routes=[
                 Route("/", self._serve_index),
@@ -77,6 +78,12 @@ class OverlayServer:
     async def _websocket_endpoint(self, websocket: WebSocket) -> None:
         await websocket.accept()
         self._clients.add(websocket)
+        if self._last_state is not None:
+            try:
+                await websocket.send_text(json.dumps(self._last_state))
+            except Exception:
+                self._clients.discard(websocket)
+                return
         try:
             while True:
                 await websocket.receive_text()
@@ -92,12 +99,16 @@ class OverlayServer:
     async def broadcast(self, state: dict[str, Any]) -> None:
         """Send *state* as a JSON text frame to every connected WebSocket client.
 
+        The state is also cached so that clients connecting after the last
+        broadcast (e.g. after a page refresh) receive it immediately.
+
         Dead connections are silently removed.
 
         Args:
             state: A JSON-serialisable dict (e.g. from
                 :func:`~overlay.state.serialize_game_state`).
         """
+        self._last_state = state
         if not self._clients:
             return
         message = json.dumps(state)

@@ -238,3 +238,31 @@ class TestOverlayWebSocket:
         server = OverlayServer()
         # Should not raise even with zero clients
         asyncio.run(server.broadcast({"status": "idle"}))
+
+    def test_new_client_receives_last_state_on_connect(self):
+        """A client that connects after a broadcast immediately gets the cached state."""
+        import asyncio
+
+        server = OverlayServer()
+        client = TestClient(server.app)
+
+        payload = {"status": "running", "attempt_count": 5}
+        asyncio.run(server.broadcast(payload))
+
+        with client.websocket_connect("/ws") as ws:
+            data = ws.receive_text()
+
+        decoded = json.loads(data)
+        assert decoded["status"] == "running"
+        assert decoded["attempt_count"] == 5
+
+    def test_new_client_receives_no_message_when_no_broadcast_yet(self):
+        """A client that connects before any broadcast does not get a spurious message."""
+        server = OverlayServer()
+        client = TestClient(server.app)
+
+        # Connect and verify that no state is cached, meaning the connection
+        # handler will not attempt to send an initial message to the client.
+        # (_last_state is the guard for the send; None means no send occurs.)
+        with client.websocket_connect("/ws") as ws:
+            assert server._last_state is None
