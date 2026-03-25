@@ -192,7 +192,7 @@
     const elAttempts  = document.getElementById('attempt-count');
 
     function pct(score) {
-      return score != null ? Math.round(score * 100) : 0;
+      return score != null ? Math.floor(score * 100) : 0;
     }
 
     function barColor(score) {

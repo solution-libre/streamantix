@@ -82,6 +82,21 @@ class TestSemanticEngineSimilarity:
             assert score is not None
             assert 0.0 <= score <= 1.0
 
+    def test_score_is_percentile_rank(self):
+        """score_guess returns a percentile rank, not raw cosine similarity.
+
+        With 4 words in the test vocabulary (chat, chien, maison, voiture),
+        effective_vocab = 3 (excluding the target 'chat' itself).  chien is
+        the closest non-target word (rank 1/3 → score 2/3) and maison is
+        less similar (rank 2/3 → score 1/3), so chien must outrank maison.
+        """
+        engine = _make_engine()
+        score_chien = engine.score_guess("chien", "chat")   # rank 1/3 → 2/3
+        score_maison = engine.score_guess("maison", "chat") # rank 2/3 → 1/3
+        assert score_chien is not None
+        assert score_maison is not None
+        assert score_chien > score_maison
+
     def test_unknown_word_returns_none(self):
         engine = _make_engine()
         assert engine.score_guess("inconnu", "chat") is None

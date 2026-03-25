@@ -79,23 +79,39 @@ class SemanticEngine:
     def score_guess(self, guess: str, target: str) -> float | None:
         """Score a player's guess against the target word.
 
-        Returns ``1.0`` for an exact (cleaned) match, or the cosine similarity
-        for a non-exact guess.  Returns ``None`` when either word is missing
-        from the vocabulary.
+        Returns ``1.0`` for an exact (cleaned) match, or a **percentile rank**
+        in ``[0, 1)`` for a non-exact guess.  Returns ``None`` when either
+        word is missing from the vocabulary.
+
+        The percentile rank expresses what fraction of the vocabulary is *less
+        similar* to *target* than *guess* is.  For example, a score of
+        ``0.99`` means the guess is closer to the target than 99 % of all
+        words in the model.
 
         Args:
             guess: The word submitted by the player.
             target: The secret target word.
 
         Returns:
-            A float in ``[0, 1]`` (after clamping), or ``None``.
+            A float in ``[0, 1]``, or ``None``.
         """
         if clean_word(guess) == clean_word(target):
             return 1.0
-        sim = self.similarity(guess, target)
-        if sim is None:
+        if self._model is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+        key_guess = self._cleaned_key_map.get(clean_word(guess))
+        key_target = self._cleaned_key_map.get(clean_word(target))
+        if key_guess is None or key_target is None:
             return None
-        return max(0.0, min(1.0, sim))
+        rank = self._model.rank(key_target, key_guess)
+        # effective_vocab excludes the target word itself, matching how
+        # gensim's closer_than() (used internally by rank()) omits key1.
+        # Guard against degenerate single-word vocabularies where no ranking
+        # is meaningful and division by zero would occur.
+        effective_vocab = len(self._model.key_to_index) - 1
+        if effective_vocab <= 0:
+            return None
+        return max(0.0, min(1.0, (effective_vocab - rank) / effective_vocab))
 
 
 class GameEngine:
