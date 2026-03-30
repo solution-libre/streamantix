@@ -30,7 +30,7 @@ Players guess a secret word by submitting words in chat. The bot uses word embed
 
    | Variable               | Description                                                    | Default |
    |------------------------|----------------------------------------------------------------|---------|
-   | `TWITCH_TOKEN`         | Manual OAuth token (`oauth:…`) — optional if using OAuth flow | —       |
+   | `TWITCH_TOKEN`         | Manual OAuth token (`oauth:…`) — optional if using OAuth flow  | —       |
    | `TWITCH_CHANNEL`       | Twitch channel name to join — **required**                     | —       |
    | `TWITCH_CLIENT_ID`     | Twitch app client ID (OAuth flow)                              | —       |
    | `TWITCH_CLIENT_SECRET` | Twitch app client secret (OAuth flow)                          | —       |
@@ -92,6 +92,7 @@ poetry run python main.py auth-login
 ```
 
 This will:
+
 1. Print an authorization URL — open it in your browser.
 2. Start a temporary local HTTP server on port 4343.
 3. After you click **Authorize** on the Twitch page, capture the code and
@@ -144,10 +145,10 @@ The `.secrets/` directory is gitignored to prevent accidentally committing token
 The `data/` directory contains the curated French words that the bot can pick as the
 secret target word for each game round.
 
-| File                     | Difficulty | Description |
-|--------------------------|------------|-------------|
-| `interest_words_f.txt`   | Facile (easy)      | Common, concrete everyday nouns |
-| `interest_words_d.txt`   | Difficile (hard)   | Abstract or less frequent words |
+| File                   | Difficulty       | Description                     |
+| ---------------------- | ---------------- | ------------------------------- |
+| `interest_words_f.txt` | Facile (easy)    | Common, concrete everyday nouns |
+| `interest_words_d.txt` | Difficile (hard) | Abstract or less frequent words |
 
 Each file uses one word per line. Lines starting with `#` are treated as comments and
 are ignored by the word loader. You can add, remove, or replace words freely — just keep
