@@ -27,6 +27,7 @@ _HELP_TEXT = (
     "guess <word> — submit a guess | "
     "hint — show top 10 guesses | "
     "status — show current game status | "
+    "solution — reveal the answer (broadcaster only) | "
     "setprefix <prefix> — change prefix (mod/broadcaster) | "
     "setcooldown <seconds> — change cooldown (mod/broadcaster) | "
     "setdifficulty <easy|hard> — set difficulty for next game (mod/broadcaster)"
@@ -162,6 +163,27 @@ class StreamantixBot(commands.Bot):
             f"A new {diff.value} game has started! "
             f"Guess the secret word using '{self._command_prefix} guess <word>'."
         )
+        await self._notify_overlay()
+
+    @commands.command()
+    async def solution(self, ctx: commands.Context) -> None:
+        """Reveal the target word (broadcaster only).
+
+        Usage: <prefix> solution
+
+        Marks the game as found by the broadcaster and displays the answer.
+        """
+        if not ctx.author.is_broadcaster:
+            await ctx.send("Only the broadcaster can reveal the solution.")
+            return
+
+        if self._game_state.target_word is None:
+            await ctx.send("No game is currently in progress.")
+            return
+
+        target = self._game_state.target_word
+        self._game_state.submit_guess(ctx.author.name, target)
+        await ctx.send(f"🎯 The broadcaster revealed the solution: '{target}'")
         await self._notify_overlay()
 
     @commands.command()

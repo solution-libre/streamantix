@@ -879,3 +879,96 @@ class TestSetdifficultyIntegration:
         # Current game is unaffected
         assert bot._game_state.target_word == "chat"
         assert bot._game_state.attempt_count == 1
+
+
+# ---------------------------------------------------------------------------
+# solution command
+# ---------------------------------------------------------------------------
+
+_solution_fn = StreamantixBot.solution._callback
+
+
+class TestSolutionPermissions:
+    async def test_non_broadcaster_cannot_reveal(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("secret", Difficulty.EASY)
+        ctx = _make_ctx()  # no special role
+        await _solution_fn(bot, ctx)
+        ctx.send.assert_called_once()
+        assert "broadcaster" in ctx.send.call_args[0][0].lower()
+        assert not bot._game_state.is_found
+
+    async def test_moderator_cannot_reveal(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("secret", Difficulty.EASY)
+        ctx = _make_ctx(is_mod=True)
+        await _solution_fn(bot, ctx)
+        ctx.send.assert_called_once()
+        assert "broadcaster" in ctx.send.call_args[0][0].lower()
+        assert not bot._game_state.is_found
+
+    async def test_broadcaster_can_reveal(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("secret", Difficulty.EASY)
+        ctx = _make_ctx(is_broadcaster=True)
+        ctx.author.name = "streamer123"
+        await _solution_fn(bot, ctx)
+        assert bot._game_state.is_found
+
+
+class TestSolutionGameState:
+    async def test_reveal_requires_active_game(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        await _solution_fn(bot, ctx)
+        ctx.send.assert_called_once()
+        assert "no game" in ctx.send.call_args[0][0].lower()
+
+    async def test_reveal_marks_game_as_found(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("mystère", Difficulty.EASY)
+        assert not bot._game_state.is_found
+        ctx = _make_ctx(is_broadcaster=True)
+        ctx.author.name = "broadcaster"
+        await _solution_fn(bot, ctx)
+        assert bot._game_state.is_found
+
+    async def test_reveal_sets_found_by_to_broadcaster(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("énigme", Difficulty.EASY)
+        ctx = _make_ctx(is_broadcaster=True)
+        ctx.author.name = "streamer_pro"
+        await _solution_fn(bot, ctx)
+        assert bot._game_state.found_by == "streamer_pro"
+
+    async def test_reveal_message_contains_target_word(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("papillon", Difficulty.EASY)
+        ctx = _make_ctx(is_broadcaster=True)
+        ctx.author.name = "streamer"
+        await _solution_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "papillon" in message
+        assert "revealed" in message.lower() or "solution" in message.lower()
+
+    async def test_reveal_adds_to_history(self):
+        bot = _make_bot()
+        bot._game_state.start_new_game("cascade", Difficulty.EASY)
+        bot._game_state.submit_guess("alice", "rivière")
+        ctx = _make_ctx(is_broadcaster=True)
+        ctx.author.name = "broadcaster"
+        await _solution_fn(bot, ctx)
+        assert bot._game_state.attempt_count == 2
+        assert any(e.user == "broadcaster" for e in bot._game_state.history)
+
+
+class TestSolutionOverlayNotification:
+    async def test_reveal_notifies_overlay(self):
+        mock_callback = AsyncMock()
+        bot = _make_bot()
+        bot._on_state_change = mock_callback
+        bot._game_state.start_new_game("solution", Difficulty.EASY)
+        ctx = _make_ctx(is_broadcaster=True)
+        ctx.author.name = "broadcaster"
+        await _solution_fn(bot, ctx)
+        mock_callback.assert_called_once()
