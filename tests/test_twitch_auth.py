@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 import time
+import urllib.parse
+from io import BytesIO
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -115,18 +117,23 @@ class TestTokenValidity:
 class TestAuthorizationUrl:
     def test_contains_client_id(self, tmp_path):
         manager = _make_manager(tmp_path)
-        url = manager.authorization_url()
+        url = manager.authorization_url(state="teststate")
         assert "client_id=cid" in url
 
     def test_contains_response_type_code(self, tmp_path):
         manager = _make_manager(tmp_path)
-        url = manager.authorization_url()
+        url = manager.authorization_url(state="teststate")
         assert "response_type=code" in url
 
     def test_contains_scopes(self, tmp_path):
         manager = _make_manager(tmp_path)
-        url = manager.authorization_url()
+        url = manager.authorization_url(state="teststate")
         assert "scope=" in url
+
+    def test_contains_state_parameter(self, tmp_path):
+        manager = _make_manager(tmp_path)
+        url = manager.authorization_url(state="mycsrftoken")
+        assert "state=mycsrftoken" in url
 
 
 # ---------------------------------------------------------------------------
@@ -248,3 +255,70 @@ class TestGetToken:
 
         mock_login.assert_called_once()
         assert token == "brand_new_tok"
+
+
+# ---------------------------------------------------------------------------
+# TestCsrfStateValidation
+# ---------------------------------------------------------------------------
+
+
+class TestCsrfStateValidation:
+    """Verify that _wait_for_code rejects callbacks with a mismatched state."""
+
+    def _make_mock_request(self, code: str, state: str) -> MagicMock:
+        """Build a minimal fake request object for _Handler.do_GET."""
+        query = urllib.parse.urlencode({"code": code, "state": state})
+        mock_request = MagicMock()
+        mock_request.makefile.return_value = BytesIO(
+            f"GET /callback?{query} HTTP/1.1\r\nHost: localhost\r\n\r\n".encode()
+        )
+        return mock_request
+
+    def test_login_generates_unique_states(self, tmp_path):
+        """Each login call must use a distinct state value."""
+        manager = _make_manager(tmp_path)
+        states: list[str] = []
+
+        def capture_url(state: str) -> str:
+            states.append(state)
+            return f"https://example.com?state={state}"
+
+        with (
+            patch.object(manager, "authorization_url", side_effect=capture_url),
+            patch.object(manager, "_wait_for_code", return_value="code_x"),
+            patch.object(manager, "exchange_code", return_value={"access_token": "tok", "refresh_token": "", "expires_at": 9999, "scope": [], "token_type": "bearer"}),
+            patch.object(manager, "save_tokens"),
+            patch("builtins.print"),
+        ):
+            manager.login()
+            manager.login()
+
+        assert len(states) == 2
+        assert states[0] != states[1]
+
+    def test_wait_for_code_passes_expected_state_to_login(self, tmp_path):
+        """login() must forward the generated state to _wait_for_code."""
+        manager = _make_manager(tmp_path)
+        received: dict[str, str] = {}
+
+        def capture_wait(expected_state: str) -> str:
+            received["state"] = expected_state
+            return "auth_code"
+
+        captured_url: list[str] = []
+
+        def capture_url(state: str) -> str:
+            captured_url.append(state)
+            return f"https://example.com?state={state}"
+
+        with (
+            patch.object(manager, "authorization_url", side_effect=capture_url),
+            patch.object(manager, "_wait_for_code", side_effect=capture_wait),
+            patch.object(manager, "exchange_code", return_value={"access_token": "tok", "refresh_token": "", "expires_at": 9999, "scope": [], "token_type": "bearer"}),
+            patch.object(manager, "save_tokens"),
+            patch("builtins.print"),
+        ):
+            manager.login()
+
+        # The state passed to authorization_url and _wait_for_code must match
+        assert captured_url[0] == received["state"]

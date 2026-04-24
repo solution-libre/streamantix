@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import secrets
 import time
 import urllib.parse
 import urllib.request
@@ -136,20 +137,25 @@ class TokenManager:
     # Login flow (local callback server)
     # ------------------------------------------------------------------
 
-    def authorization_url(self) -> str:
-        """Build the Twitch authorization URL."""
+    def authorization_url(self, state: str) -> str:
+        """Build the Twitch authorization URL including a CSRF state token."""
         params = urllib.parse.urlencode(
             {
                 "client_id": self.client_id,
                 "redirect_uri": self.redirect_uri,
                 "response_type": "code",
                 "scope": self.scopes,
+                "state": state,
             }
         )
         return f"{TWITCH_AUTH_URL}?{params}"
 
-    def _wait_for_code(self) -> str:
-        """Start a local HTTP server and block until the OAuth callback arrives."""
+    def _wait_for_code(self, expected_state: str) -> str:
+        """Start a local HTTP server and block until the OAuth callback arrives.
+
+        Validates the *state* parameter against *expected_state* to prevent
+        CSRF attacks (RFC 6749 §10.12).
+        """
         parsed = urllib.parse.urlparse(self.redirect_uri)
         port = parsed.port or 80
         captured: dict[str, str] = {}
@@ -159,6 +165,12 @@ class TokenManager:
                 parsed_path = urllib.parse.urlparse(self.path)
                 if parsed_path.path == "/callback":
                     params = urllib.parse.parse_qs(parsed_path.query)
+                    received_state = params.get("state", [""])[0]
+                    if not secrets.compare_digest(received_state, expected_state):
+                        self.send_response(403)
+                        self.end_headers()
+                        self.wfile.write(b"Invalid state parameter. Possible CSRF attack.")
+                        return
                     if "code" in params:
                         captured["code"] = params["code"][0]
                         self.send_response(200)
@@ -186,10 +198,11 @@ class TokenManager:
 
     def login(self) -> str:
         """Run the full OAuth login flow and return the new access token."""
-        url = self.authorization_url()
+        state = secrets.token_urlsafe(16)
+        url = self.authorization_url(state=state)
         print(f"\nOpen the following URL in your browser to authorize:\n\n  {url}\n")
         print(f"Waiting for OAuth callback on {self.redirect_uri} …")
-        code = self._wait_for_code()
+        code = self._wait_for_code(expected_state=state)
         tokens = self.exchange_code(code)
         self.save_tokens(tokens)
         print("Tokens saved successfully.")
