@@ -170,6 +170,7 @@ class TokenManager:
                         self.send_response(403)
                         self.end_headers()
                         self.wfile.write(b"Invalid state parameter. Possible CSRF attack.")
+                        captured["error"] = "csrf"
                         return
                     if "code" in params:
                         captured["code"] = params["code"][0]
@@ -191,9 +192,11 @@ class TokenManager:
 
         server = HTTPServer(("", port), _Handler)
         server.timeout = 300  # 5-minute window to complete login
-        while "code" not in captured:
+        while "code" not in captured and "error" not in captured:
             server.handle_request()
         server.server_close()
+        if "error" in captured:
+            raise RuntimeError("OAuth login aborted: CSRF state mismatch.")
         return captured["code"]
 
     def login(self) -> str:
@@ -227,7 +230,5 @@ class TokenManager:
                 return tokens["access_token"]
             except Exception as exc:
                 print(f"Token refresh failed ({exc}). Re-authenticating…")
-
-        return self.login()
 
         return self.login()
