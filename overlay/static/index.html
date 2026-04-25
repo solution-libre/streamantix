@@ -246,13 +246,31 @@
         const row = document.createElement('div');
         row.className = 'top-entry';
         const w = pct(entry.score);
-        row.innerHTML = `
-          <span class="top-rank">${idx + 1}</span>
-          <span class="top-word">${entry.word}</span>
-          <div class="top-bar-bg">
-            <div class="top-bar" style="width:${w}%;background:${barColor(entry.score)}"></div>
-          </div>
-          <span class="top-score">${w}%</span>`;
+
+        const rankSpan = document.createElement('span');
+        rankSpan.className = 'top-rank';
+        rankSpan.textContent = idx + 1;
+
+        const wordSpan = document.createElement('span');
+        wordSpan.className = 'top-word';
+        wordSpan.textContent = entry.word;
+
+        const barBg = document.createElement('div');
+        barBg.className = 'top-bar-bg';
+        const bar = document.createElement('div');
+        bar.className = 'top-bar';
+        bar.style.width = w + '%';
+        bar.style.background = barColor(entry.score);
+        barBg.appendChild(bar);
+
+        const scoreSpan = document.createElement('span');
+        scoreSpan.className = 'top-score';
+        scoreSpan.textContent = w + '%';
+
+        row.appendChild(rankSpan);
+        row.appendChild(wordSpan);
+        row.appendChild(barBg);
+        row.appendChild(scoreSpan);
         elTopList.appendChild(row);
       });
 
