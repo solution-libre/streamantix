@@ -37,6 +37,8 @@ _MAX_PREFIX_LEN = 10
 _MAX_WORD_LEN = 50
 # No whitespace allowed in prefix
 _VALID_PREFIX_RE = re.compile(r"^\S+$")
+# Only Unicode letters and internal hyphens allowed in guesses (e.g. arc-en-ciel)
+_VALID_GUESS_RE = re.compile(r"^[^\W\d_]+(?:-[^\W\d_]+)*$")
 
 
 def _validate_prefix(prefix: str | None) -> str | None:
@@ -207,6 +209,12 @@ class StreamantixBot(commands.Bot):
 
         if len(word) > _MAX_WORD_LEN:
             await ctx.send(f"Word is too long (max {_MAX_WORD_LEN} characters).")
+            return
+
+        if not _VALID_GUESS_RE.match(word):
+            await ctx.send(
+                "Guess must contain letters only (hyphens allowed between letters)."
+            )
             return
 
         try:

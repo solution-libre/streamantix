@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from bot.bot import StreamantixBot, _validate_prefix, _validate_cooldown, _validate_difficulty
+from bot.bot import StreamantixBot, _validate_prefix, _validate_cooldown, _validate_difficulty, _VALID_GUESS_RE
 from bot.cooldown import CooldownManager
 from game.state import Difficulty, GameState
 
@@ -527,6 +527,105 @@ class TestHelpCommand:
         message = ctx.send.call_args[0][0]
         for keyword in ("help", "start", "guess", "setprefix", "setcooldown", "hint", "status", "setdifficulty"):
             assert keyword in message
+
+
+# ---------------------------------------------------------------------------
+# guess — word character validation (regex unit tests)
+# ---------------------------------------------------------------------------
+
+
+class TestGuessWordValidationRegex:
+    """Unit tests for _VALID_GUESS_RE (no Twitch connection needed)."""
+
+    def test_plain_ascii_word(self):
+        assert _VALID_GUESS_RE.match("bonjour")
+
+    def test_accented_french_chars(self):
+        assert _VALID_GUESS_RE.match("étoile")
+        assert _VALID_GUESS_RE.match("château")
+        assert _VALID_GUESS_RE.match("forêt")
+        assert _VALID_GUESS_RE.match("naïf")
+        assert _VALID_GUESS_RE.match("ça")
+
+    def test_compound_word_with_hyphen(self):
+        assert _VALID_GUESS_RE.match("arc-en-ciel")
+        assert _VALID_GUESS_RE.match("après-midi")
+
+    def test_leading_hyphen_rejected(self):
+        assert not _VALID_GUESS_RE.match("-mot")
+
+    def test_trailing_hyphen_rejected(self):
+        assert not _VALID_GUESS_RE.match("mot-")
+
+    def test_consecutive_hyphens_rejected(self):
+        assert not _VALID_GUESS_RE.match("mot--mot")
+
+    def test_only_hyphens_rejected(self):
+        assert not _VALID_GUESS_RE.match("---")
+
+    def test_digit_rejected(self):
+        assert not _VALID_GUESS_RE.match("mot1")
+        assert not _VALID_GUESS_RE.match("1mot")
+        assert not _VALID_GUESS_RE.match("42")
+
+    def test_punctuation_rejected(self):
+        assert not _VALID_GUESS_RE.match("chat!")
+        assert not _VALID_GUESS_RE.match("chat.")
+        assert not _VALID_GUESS_RE.match("<script>")
+
+    def test_emoji_rejected(self):
+        assert not _VALID_GUESS_RE.match("😀")
+        assert not _VALID_GUESS_RE.match("chat😀")
+
+    def test_underscore_rejected(self):
+        assert not _VALID_GUESS_RE.match("chat_bot")
+
+    def test_space_rejected(self):
+        assert not _VALID_GUESS_RE.match("arc en ciel")
+
+
+# ---------------------------------------------------------------------------
+# guess — word character validation (command integration)
+# ---------------------------------------------------------------------------
+
+
+class TestGuessWordValidationCommand:
+    """Integration tests: invalid chars should be rejected before submit_guess."""
+
+    async def test_digit_in_word_rejected(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        await _guess_fn(bot, ctx, "mot1")
+        message = ctx.send.call_args[0][0]
+        assert "letter" in message.lower()
+
+    async def test_special_char_in_word_rejected(self):
+        bot = _make_bot(cooldown=0)
+        bot._game_state.start_new_game("chat", Difficulty.EASY)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        await _guess_fn(bot, ctx, "chat!")
+        message = ctx.send.call_args[0][0]
+        assert "letter" in message.lower()
+
+    async def test_compound_word_accepted(self):
+        bot = _make_bot(cooldown=0)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        # No active game — validation passes and reaches "no game" error
+        await _guess_fn(bot, ctx, "arc-en-ciel")
+        message = ctx.send.call_args[0][0]
+        assert "letter" not in message.lower()
+
+    async def test_accented_word_accepted(self):
+        bot = _make_bot(cooldown=0)
+        ctx = _make_ctx()
+        ctx.author.name = "alice"
+        await _guess_fn(bot, ctx, "étoile")
+        message = ctx.send.call_args[0][0]
+        assert "letter" not in message.lower()
 
     async def test_help_available_to_any_user(self):
         """Any user (no mod/broadcaster role) can call help."""

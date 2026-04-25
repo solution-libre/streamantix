@@ -192,7 +192,7 @@
     const elAttempts  = document.getElementById('attempt-count');
 
     function pct(score) {
-      return score != null ? Math.floor(score * 100) : 0;
+      return (score != null && isFinite(score)) ? Math.floor(score * 100) : 0;
     }
 
     function barColor(score) {
@@ -245,14 +245,32 @@
       (state.top_guesses || []).forEach((entry, idx) => {
         const row = document.createElement('div');
         row.className = 'top-entry';
-        const w = pct(entry.score);
-        row.innerHTML = `
-          <span class="top-rank">${idx + 1}</span>
-          <span class="top-word">${entry.word}</span>
-          <div class="top-bar-bg">
-            <div class="top-bar" style="width:${w}%;background:${barColor(entry.score)}"></div>
-          </div>
-          <span class="top-score">${w}%</span>`;
+        const pctScore = pct(entry.score);
+
+        const rankSpan = document.createElement('span');
+        rankSpan.className = 'top-rank';
+        rankSpan.textContent = idx + 1;
+
+        const wordSpan = document.createElement('span');
+        wordSpan.className = 'top-word';
+        wordSpan.textContent = entry.word;
+
+        const barBg = document.createElement('div');
+        barBg.className = 'top-bar-bg';
+        const bar = document.createElement('div');
+        bar.className = 'top-bar';
+        bar.style.width = pctScore + '%';
+        bar.style.background = barColor(entry.score);
+        barBg.appendChild(bar);
+
+        const scoreSpan = document.createElement('span');
+        scoreSpan.className = 'top-score';
+        scoreSpan.textContent = pctScore + '%';
+
+        row.appendChild(rankSpan);
+        row.appendChild(wordSpan);
+        row.appendChild(barBg);
+        row.appendChild(scoreSpan);
         elTopList.appendChild(row);
       });
 
