@@ -18,8 +18,11 @@
 	// Use 'forwardPorts' to make a list of ports inside the container available locally.
 	// "forwardPorts": [],
 
+	"onCreateCommand": "sh .devcontainer/onCreateCommand.sh",
+	"initializeCommand": [ ".devcontainer/initializeCommand.sh" ],
+
 	// Use 'postCreateCommand' to run commands after the container is created.
-	// "postCreateCommand": "pip3 install --user -r requirements.txt",
+	// "postCreateCommand": "sh .devcontainer/postCreateCommand.sh",
 
 	// Configure tool-specific properties.
 	"customizations": {
@@ -33,7 +36,11 @@
 				"ms-python.python"
 			]
 		}
-	}
+	},
+
+	"mounts": [
+		"source=${localEnv:HOME}${localEnv:USERPROFILE}/.config/gh/,target=/home/vscode/.config/gh,type=bind,consistency=cached"
+	]
 
 	// Uncomment to connect as root instead. More info: https://aka.ms/dev-containers-non-root.
 	// "remoteUser": "root"
