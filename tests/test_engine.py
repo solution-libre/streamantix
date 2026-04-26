@@ -32,6 +32,7 @@ def _make_engine() -> SemanticEngine:
     engine._model_path = "<in-memory>"
     engine._model = kv
     engine._cleaned_key_map = {w: w for w in words}
+    engine._top_n = len(kv.key_to_index) - 1  # 3 (4 words minus the target)
     return engine
 
 
@@ -96,6 +97,13 @@ class TestSemanticEngineSimilarity:
         assert score_chien is not None
         assert score_maison is not None
         assert score_chien > score_maison
+
+    def test_word_beyond_top_n_returns_zero(self):
+        """Words ranked beyond top_n score 0.0 instead of a fractional rank."""
+        engine = _make_engine()
+        engine._top_n = 1  # only rank-1 word (chien) is inside the window
+        score = engine.score_guess("maison", "chat")  # rank 2 > top_n=1
+        assert score == 0.0
 
     def test_unknown_word_returns_none(self):
         engine = _make_engine()

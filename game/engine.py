@@ -10,6 +10,7 @@ from game.word_utils import build_cleaned_key_map, clean_word
 _DEFAULT_MODEL_PATH = os.getenv(
     "MODEL_PATH", "models/frWac_no_postag_no_phrase_700_skip_cut50.bin"
 )
+_DEFAULT_TOP_N: int = int(os.getenv("SCORING_TOP_N", "1000"))
 
 
 class SemanticEngine:
@@ -23,12 +24,19 @@ class SemanticEngine:
             the value of the ``MODEL_PATH`` environment variable, or the
             standard ``models/frWac_no_postag_no_phrase_700_skip_cut50.bin``
             path when the variable is unset.
+        top_n: Number of nearest neighbours used for rank scoring.  Words
+            ranked beyond this threshold return ``0.0``.  Defaults to the
+            value of the ``SCORING_TOP_N`` environment variable, or ``1000``
+            when unset.
     """
 
-    def __init__(self, model_path: str | pathlib.Path | None = None) -> None:
+    def __init__(self, model_path: str | pathlib.Path | None = None, top_n: int = _DEFAULT_TOP_N) -> None:
+        if top_n <= 0:
+            raise ValueError(f"top_n must be a positive integer, got {top_n}")
         self._model_path = str(model_path or _DEFAULT_MODEL_PATH)
         self._model: KeyedVectors | None = None
         self._cleaned_key_map: dict[str, str] = {}
+        self._top_n: int = top_n
 
     # ------------------------------------------------------------------
     # Model management
@@ -79,14 +87,13 @@ class SemanticEngine:
     def score_guess(self, guess: str, target: str) -> float | None:
         """Score a player's guess against the target word.
 
-        Returns ``1.0`` for an exact (cleaned) match, or a **percentile rank**
-        in ``[0, 1)`` for a non-exact guess.  Returns ``None`` when either
-        word is missing from the vocabulary.
+        Returns ``1.0`` for an exact (cleaned) match, or a **top-N rank
+        score** in ``[0, 1)`` for a non-exact guess.  Returns ``None`` when
+        either word is missing from the vocabulary.
 
-        The percentile rank expresses what fraction of the vocabulary is *less
-        similar* to *target* than *guess* is.  For example, a score of
-        ``0.99`` means the guess is closer to the target than 99 % of all
-        words in the model.
+        The score is computed over the top-``top_n`` nearest neighbours of
+        *target*: a score of ``0.99`` means the guess is among the top 1 %
+        of the nearest words.  Words ranked beyond ``top_n`` return ``0.0``.
 
         Args:
             guess: The word submitted by the player.
@@ -104,14 +111,9 @@ class SemanticEngine:
         if key_guess is None or key_target is None:
             return None
         rank = self._model.rank(key_target, key_guess)
-        # effective_vocab excludes the target word itself, matching how
-        # gensim's closer_than() (used internally by rank()) omits key1.
-        # Guard against degenerate single-word vocabularies where no ranking
-        # is meaningful and division by zero would occur.
-        effective_vocab = len(self._model.key_to_index) - 1
-        if effective_vocab <= 0:
-            return None
-        return max(0.0, min(1.0, (effective_vocab - rank) / effective_vocab))
+        if rank > self._top_n:
+            return 0.0
+        return (self._top_n - rank) / self._top_n
 
 
 class GameEngine:
