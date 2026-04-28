@@ -693,7 +693,7 @@ class TestStartDifficulty:
     async def test_medium_difficulty_accepted(self):
         bot = _make_bot()
         ctx = _make_ctx(is_broadcaster=True)
-        with patch("random.choice", return_value="ambiguïté"):
+        with patch("random.choice", return_value="rêve"):
             await _start_fn(bot, ctx, "medium")
         assert bot._game_state.difficulty == Difficulty.MEDIUM
 
@@ -915,8 +915,8 @@ class TestDifficultyValidation:
     def test_hard_is_valid(self):
         assert _validate_difficulty("hard") is None
 
-    def test_medium_is_invalid(self):
-        assert _validate_difficulty("medium") is not None
+    def test_medium_is_valid(self):
+        assert _validate_difficulty("medium") is None
 
     def test_empty_is_invalid(self):
         assert _validate_difficulty("") is not None
@@ -963,7 +963,7 @@ class TestSetdifficultyValidation:
     async def test_invalid_difficulty_rejected(self):
         bot = _make_bot()
         ctx = _make_ctx(is_mod=True)
-        await _setdifficulty_fn(bot, ctx, "medium")
+        await _setdifficulty_fn(bot, ctx, "extreme")
         assert bot._next_difficulty == Difficulty.EASY  # unchanged
         ctx.send.assert_called_once()
         assert "invalid" in ctx.send.call_args[0][0].lower()
@@ -986,6 +986,13 @@ class TestSetdifficultyValidation:
         ctx = _make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx, "hard")
         assert bot._next_difficulty == Difficulty.HARD
+        ctx.send.assert_called_once()
+
+    async def test_valid_medium_accepted(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx, "medium")
+        assert bot._next_difficulty == Difficulty.MEDIUM
         ctx.send.assert_called_once()
 
     async def test_confirmation_message_contains_difficulty(self):
