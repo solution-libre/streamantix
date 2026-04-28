@@ -11,25 +11,7 @@ from starlette.websockets import WebSocketDisconnect
 from game.state import Difficulty, GameState
 from overlay.server import OverlayServer
 from overlay.state import serialize_game_state
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-class _FakeScorer:
-    """Deterministic scorer for tests: returns the length-ratio as score."""
-
-    def score_guess(self, guess: str, target: str) -> float | None:
-        if not target:
-            return None
-        return min(1.0, len(guess) / len(target))
-
-
-def _make_state(with_scorer: bool = False) -> GameState:
-    scorer = _FakeScorer() if with_scorer else None
-    return GameState(scorer=scorer)
+from tests.conftest import FakeScorer
 
 
 # ---------------------------------------------------------------------------
@@ -39,60 +21,60 @@ def _make_state(with_scorer: bool = False) -> GameState:
 
 class TestSerializeIdle:
     def test_status_is_idle_when_no_game_started(self):
-        gs = _make_state()
+        gs = GameState()
         result = serialize_game_state(gs)
         assert result["status"] == "idle"
 
     def test_all_fields_present_when_idle(self):
-        gs = _make_state()
+        gs = GameState()
         result = serialize_game_state(gs)
         for key in ("status", "difficulty", "attempt_count", "best_guess", "last_guess", "top_guesses", "target_word"):
             assert key in result
 
     def test_idle_has_none_target_word(self):
-        gs = _make_state()
+        gs = GameState()
         result = serialize_game_state(gs)
         assert result["target_word"] is None
 
     def test_idle_has_zero_attempt_count(self):
-        gs = _make_state()
+        gs = GameState()
         result = serialize_game_state(gs)
         assert result["attempt_count"] == 0
 
     def test_idle_has_empty_top_guesses(self):
-        gs = _make_state()
+        gs = GameState()
         result = serialize_game_state(gs)
         assert result["top_guesses"] == []
 
 
 class TestSerializeRunning:
     def test_status_running_after_start(self):
-        gs = _make_state()
+        gs = GameState()
         gs.start_new_game("chat", Difficulty.EASY)
         result = serialize_game_state(gs)
         assert result["status"] == "running"
 
     def test_difficulty_present(self):
-        gs = _make_state()
+        gs = GameState()
         gs.start_new_game("chat", Difficulty.HARD)
         result = serialize_game_state(gs)
         assert result["difficulty"] == "hard"
 
     def test_target_word_hidden_while_running(self):
-        gs = _make_state()
+        gs = GameState()
         gs.start_new_game("chat", Difficulty.EASY)
         result = serialize_game_state(gs)
         assert result["target_word"] is None
 
     def test_attempt_count_increments(self):
-        gs = _make_state(with_scorer=True)
+        gs = GameState(scorer=FakeScorer())
         gs.start_new_game("chat", Difficulty.EASY)
         gs.submit_guess("alice", "chien")
         result = serialize_game_state(gs)
         assert result["attempt_count"] == 1
 
     def test_last_guess_populated_after_guess(self):
-        gs = _make_state(with_scorer=True)
+        gs = GameState(scorer=FakeScorer())
         gs.start_new_game("chat", Difficulty.EASY)
         gs.submit_guess("alice", "chien")
         result = serialize_game_state(gs)
@@ -101,13 +83,13 @@ class TestSerializeRunning:
         assert result["last_guess"]["user"] == "alice"
 
     def test_last_guess_is_none_before_any_guess(self):
-        gs = _make_state()
+        gs = GameState()
         gs.start_new_game("chat", Difficulty.EASY)
         result = serialize_game_state(gs)
         assert result["last_guess"] is None
 
     def test_best_guess_is_highest_scored(self):
-        gs = _make_state(with_scorer=True)
+        gs = GameState(scorer=FakeScorer())
         gs.start_new_game("chat", Difficulty.EASY)
         gs.submit_guess("alice", "ch")       # score = 2/4 = 0.5
         gs.submit_guess("bob", "chateau")    # score = 6/4 -> clamped to 1.0, but this is exact? No, clean("chateau") != clean("chat")
@@ -116,7 +98,7 @@ class TestSerializeRunning:
         assert result["best_guess"]["score"] >= 0.5
 
     def test_top_guesses_max_ten(self):
-        gs = _make_state(with_scorer=True)
+        gs = GameState(scorer=FakeScorer())
         gs.start_new_game("chat", Difficulty.EASY)
         for i in range(15):
             gs.submit_guess(f"user{i}", "ch")
@@ -124,7 +106,7 @@ class TestSerializeRunning:
         assert len(result["top_guesses"]) <= 10
 
     def test_top_guesses_ordered_by_descending_score(self):
-        gs = _make_state(with_scorer=True)
+        gs = GameState(scorer=FakeScorer())
         gs.start_new_game("chat", Difficulty.EASY)
         gs.submit_guess("alice", "c")     # score = 1/4
         gs.submit_guess("bob", "cha")     # score = 3/4
@@ -134,7 +116,7 @@ class TestSerializeRunning:
         assert scores == sorted(scores, reverse=True)
 
     def test_top_guesses_contain_required_keys(self):
-        gs = _make_state(with_scorer=True)
+        gs = GameState(scorer=FakeScorer())
         gs.start_new_game("chat", Difficulty.EASY)
         gs.submit_guess("alice", "ch")
         result = serialize_game_state(gs)
@@ -146,21 +128,21 @@ class TestSerializeRunning:
 
 class TestSerializeFound:
     def test_status_found_after_correct_guess(self):
-        gs = _make_state()
+        gs = GameState()
         gs.start_new_game("chat", Difficulty.EASY)
         gs.submit_guess("alice", "chat")
         result = serialize_game_state(gs)
         assert result["status"] == "found"
 
     def test_target_word_revealed_when_found(self):
-        gs = _make_state()
+        gs = GameState()
         gs.start_new_game("chat", Difficulty.EASY)
         gs.submit_guess("alice", "chat")
         result = serialize_game_state(gs)
         assert result["target_word"] == "chat"
 
     def test_serialisation_is_json_serialisable(self):
-        gs = _make_state(with_scorer=True)
+        gs = GameState(scorer=FakeScorer())
         gs.start_new_game("chat", Difficulty.EASY)
         gs.submit_guess("alice", "chien")
         gs.submit_guess("bob", "chat")
