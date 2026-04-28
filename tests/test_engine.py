@@ -33,6 +33,7 @@ def _make_engine() -> SemanticEngine:
     engine._model = kv
     engine._cleaned_key_map = {w: w for w in words}
     engine._vocab_size = len(kv.key_to_index)  # 4
+    engine._max_score = None  # resolved lazily in score_guess
     return engine
 
 
@@ -77,9 +78,11 @@ class TestSemanticEngineSimilarity:
 
     def test_unrelated_words_return_low_score(self):
         engine = _make_engine()
-        score = engine.score_guess("maison", "chat")
-        assert score is not None
-        assert score < 0.5
+        score_close = engine.score_guess("chien", "chat")
+        score_unrelated = engine.score_guess("maison", "chat")
+        assert score_close is not None
+        assert score_unrelated is not None
+        assert score_unrelated < score_close
 
     def test_score_is_between_zero_and_one(self):
         engine = _make_engine()
@@ -89,15 +92,14 @@ class TestSemanticEngineSimilarity:
             assert 0.0 <= score <= 1.0
 
     def test_score_is_log_rank(self):
-        """score_guess returns a logarithmic rank score, not raw cosine similarity.
+        """score_guess returns a logarithmic rank score rescaled so rank 1 = 0.99.
 
-        With vocab_size=4 and the log formula, chien (rank 1) scores
-        1 - log(2)/log(5) ≈ 0.57 and maison (rank 2) scores
-        1 - log(3)/log(5) ≈ 0.32, so chien must outrank maison.
+        With vocab_size=4, chien (rank 1) scores exactly 0.99 and maison
+        (rank 2) scores less, so chien must outrank maison.
         """
         engine = _make_engine()
-        score_chien = engine.score_guess("chien", "chat")   # rank 1 → ~0.57
-        score_maison = engine.score_guess("maison", "chat") # rank 2 → ~0.32
+        score_chien = engine.score_guess("chien", "chat")   # rank 1 → 0.99
+        score_maison = engine.score_guess("maison", "chat") # rank 2 → lower
         assert score_chien is not None
         assert score_maison is not None
         assert score_chien > score_maison
@@ -151,8 +153,9 @@ class TestScoreGuess:
 
     def test_unrelated_word_returns_low_score(self):
         ge = GameEngine("chat", semantic_engine=_make_engine())
-        score = ge.score_guess("maison")
-        assert score < 0.5
+        score_close = ge.score_guess("chien")
+        score_unrelated = ge.score_guess("maison")
+        assert score_unrelated < score_close
 
     def test_score_is_between_zero_and_one(self):
         ge = GameEngine("chat", semantic_engine=_make_engine())

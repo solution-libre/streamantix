@@ -32,6 +32,7 @@ class SemanticEngine:
         self._model: KeyedVectors | None = None
         self._cleaned_key_map: dict[str, str] = {}
         self._vocab_size: int | None = None
+        self._max_score: float | None = None
 
     # ------------------------------------------------------------------
     # Model management
@@ -48,6 +49,7 @@ class SemanticEngine:
         )
         self._cleaned_key_map = build_cleaned_key_map(self._model.key_to_index)
         self._vocab_size = len(self._model.key_to_index)
+        self._max_score = 1.0 - math.log(2) / math.log(self._vocab_size + 1)
 
     @property
     def is_loaded(self) -> bool:
@@ -84,21 +86,21 @@ class SemanticEngine:
         """Score a player's guess against the target word.
 
         Returns ``1.0`` for an exact (cleaned) match, or a **logarithmic rank
-        score** in ``(0, 1)`` for a non-exact in-vocabulary guess.  Returns
-        ``None`` when either word is missing from the vocabulary.
+        score** rescaled to ``(0, 0.99]`` for a non-exact in-vocabulary guess.
+        Returns ``None`` when either word is missing from the vocabulary.
 
-        The score formula is ``1 − log(rank+1) / log(V+1)`` where *rank* is
-        1-based (1 = closest neighbour) and *V* is the full vocabulary size.
-        Because rank ≤ V−1 < V for any in-vocabulary word, every valid guess
-        returns a strictly positive score.  The closest synonym scores ≈94 %;
-        rank 10 000 ≈23 %; the furthest possible word scores ≈0.003 %.
+        The raw formula ``1 − log(rank+1) / log(V+1)`` is rescaled so that
+        rank 1 (the closest vocabulary neighbour) maps to exactly ``0.99``
+        and the furthest possible word maps to near ``0``.  ``1.0`` is
+        reserved exclusively for exact matches.  The closest synonym scores
+        ``0.99`` (99 %); rank 10 000 ≈ 24 %; the furthest word ≈ 0.003 %.
 
         Args:
             guess: The word submitted by the player.
             target: The secret target word.
 
         Returns:
-            A float in ``(0, 1]``, or ``None`` if either word is OOV.
+            A float in ``(0, 0.99]``, or ``None`` if either word is OOV.
         """
         clean_guess = clean_word(guess)
         clean_target = clean_word(target)
@@ -112,7 +114,9 @@ class SemanticEngine:
             return None
         rank = self._model.rank(key_target, key_guess)
         vocab_size = self._vocab_size or len(self._model.key_to_index)
-        return max(0.0, 1.0 - math.log(rank + 1) / math.log(vocab_size + 1))
+        max_score = self._max_score or (1.0 - math.log(2) / math.log(vocab_size + 1))
+        score_raw = max(0.0, 1.0 - math.log(rank + 1) / math.log(vocab_size + 1))
+        return score_raw * 0.99 / max_score
 
 
 class GameEngine:
