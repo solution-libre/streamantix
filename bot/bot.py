@@ -159,6 +159,16 @@ class StreamantixBot(commands.Bot):
             await ctx.send("Word list is empty. Cannot start game.")
             return
 
+        scorer = self._game_state.scorer
+        if scorer is not None:
+            words = [w for w in words if scorer.is_in_vocab(w)]
+            if not words:
+                await ctx.send(
+                    "No playable words found for this difficulty "
+                    "(all words are out of vocabulary). Check the word list."
+                )
+                return
+
         target = random.choice(words)
         self._game_state.start_new_game(target, diff)
         await ctx.send(
