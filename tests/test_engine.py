@@ -32,7 +32,7 @@ def _make_engine() -> SemanticEngine:
     engine._model_path = "<in-memory>"
     engine._model = kv
     engine._cleaned_key_map = {w: w for w in words}
-    engine._top_n = len(kv.key_to_index)  # 4 (gives rank 1 → ~0.57 > 0.5, rank 2 → ~0.32 < 0.5 with log formula)
+    engine._vocab_size = len(kv.key_to_index)  # 4
     return engine
 
 
@@ -58,14 +58,6 @@ class TestSemanticEngineLoading:
         engine = SemanticEngine(model_path="/nonexistent/path.bin")
         with pytest.raises(RuntimeError, match="not loaded"):
             engine.score_guess("chat", "chien")
-
-    def test_invalid_top_n_raises_value_error(self):
-        with pytest.raises(ValueError, match="top_n must be a positive integer"):
-            SemanticEngine(model_path="/nonexistent/path.bin", top_n=0)
-
-    def test_negative_top_n_raises_value_error(self):
-        with pytest.raises(ValueError, match="top_n must be a positive integer"):
-            SemanticEngine(model_path="/nonexistent/path.bin", top_n=-1)
 
 
 # ---------------------------------------------------------------------------
@@ -96,10 +88,10 @@ class TestSemanticEngineSimilarity:
             assert score is not None
             assert 0.0 <= score <= 1.0
 
-    def test_score_is_percentile_rank(self):
-        """score_guess returns a log-rank score, not raw cosine similarity.
+    def test_score_is_log_rank(self):
+        """score_guess returns a logarithmic rank score, not raw cosine similarity.
 
-        With top_n=4 and the log formula, chien (rank 1) scores
+        With vocab_size=4 and the log formula, chien (rank 1) scores
         1 - log(2)/log(5) ≈ 0.57 and maison (rank 2) scores
         1 - log(3)/log(5) ≈ 0.32, so chien must outrank maison.
         """
@@ -110,12 +102,13 @@ class TestSemanticEngineSimilarity:
         assert score_maison is not None
         assert score_chien > score_maison
 
-    def test_word_beyond_top_n_returns_zero(self):
-        """Words ranked beyond top_n score 0.0 instead of a fractional rank."""
+    def test_all_vocab_words_score_above_zero(self):
+        """Every in-vocabulary word scores strictly > 0."""
         engine = _make_engine()
-        engine._top_n = 1  # only rank-1 word (chien) is inside the window
-        score = engine.score_guess("maison", "chat")  # rank 2 > top_n=1
-        assert score == 0.0
+        for word in ["chien", "maison", "voiture"]:
+            score = engine.score_guess(word, "chat")
+            assert score is not None
+            assert score > 0.0, f"{word!r} scored 0"
 
     def test_unknown_word_returns_none(self):
         engine = _make_engine()
@@ -125,13 +118,6 @@ class TestSemanticEngineSimilarity:
         engine = _make_engine()
         assert engine.similarity("inconnu", "chat") is None
         assert engine.similarity("chat", "inconnu") is None
-
-    def test_score_at_exactly_top_n_returns_zero(self):
-        """At rank == top_n the log formula evaluates to exactly 0.0."""
-        engine = _make_engine()
-        engine._top_n = 2  # maison has rank 2; rank == top_n
-        score = engine.score_guess("maison", "chat")
-        assert score == pytest.approx(0.0)
 
     def test_similarity_is_symmetric(self):
         engine = _make_engine()

@@ -9,7 +9,6 @@ import config
 from game.word_utils import build_cleaned_key_map, clean_word
 
 _DEFAULT_MODEL_PATH: str = config.MODEL_PATH
-_DEFAULT_TOP_N: int = config.SCORING_TOP_N
 
 
 class SemanticEngine:
@@ -23,23 +22,16 @@ class SemanticEngine:
             the value of the ``MODEL_PATH`` environment variable, or the
             standard ``models/frWac_no_postag_no_phrase_700_skip_cut50.bin``
             path when the variable is unset.
-        top_n: Number of nearest neighbours used for rank scoring.  Words
-            ranked beyond this threshold return ``0.0``.  Defaults to the
-            value of the ``SCORING_TOP_N`` environment variable, or ``10 000``
-            when unset.
     """
 
     def __init__(
         self,
         model_path: str | pathlib.Path | None = None,
-        top_n: int = _DEFAULT_TOP_N,
     ) -> None:
-        if top_n <= 0:
-            raise ValueError(f"top_n must be a positive integer, got {top_n}")
         self._model_path = str(model_path or _DEFAULT_MODEL_PATH)
         self._model: KeyedVectors | None = None
         self._cleaned_key_map: dict[str, str] = {}
-        self._top_n: int = top_n
+        self._vocab_size: int | None = None
 
     # ------------------------------------------------------------------
     # Model management
@@ -55,6 +47,7 @@ class SemanticEngine:
             self._model_path, binary=True, unicode_errors="ignore"
         )
         self._cleaned_key_map = build_cleaned_key_map(self._model.key_to_index)
+        self._vocab_size = len(self._model.key_to_index)
 
     @property
     def is_loaded(self) -> bool:
@@ -90,21 +83,22 @@ class SemanticEngine:
     def score_guess(self, guess: str, target: str) -> float | None:
         """Score a player's guess against the target word.
 
-        Returns ``1.0`` for an exact (cleaned) match, or a **top-N rank
-        score** in ``[0, 1)`` for a non-exact guess.  Returns ``None`` when
-        either word is missing from the vocabulary.
+        Returns ``1.0`` for an exact (cleaned) match, or a **logarithmic rank
+        score** in ``(0, 1)`` for a non-exact in-vocabulary guess.  Returns
+        ``None`` when either word is missing from the vocabulary.
 
-        The score is computed over the top-``top_n`` nearest neighbours of
-        *target* using a logarithmic scale: the closest neighbour scores ~94%
-        and the ``top_n``-th neighbour scores 0%.  Words ranked beyond
-        ``top_n`` return ``0.0``.
+        The score formula is ``1 − log(rank+1) / log(V+1)`` where *rank* is
+        1-based (1 = closest neighbour) and *V* is the full vocabulary size.
+        Because rank ≤ V−1 < V for any in-vocabulary word, every valid guess
+        returns a strictly positive score.  The closest synonym scores ≈94 %;
+        rank 10 000 ≈23 %; the furthest possible word scores ≈0.003 %.
 
         Args:
             guess: The word submitted by the player.
             target: The secret target word.
 
         Returns:
-            A float in ``[0, 1]``, or ``None``.
+            A float in ``(0, 1]``, or ``None`` if either word is OOV.
         """
         clean_guess = clean_word(guess)
         clean_target = clean_word(target)
@@ -117,9 +111,8 @@ class SemanticEngine:
         if key_guess is None or key_target is None:
             return None
         rank = self._model.rank(key_target, key_guess)
-        if rank > self._top_n:
-            return 0.0
-        return max(0.0, 1.0 - math.log(rank + 1) / math.log(self._top_n + 1))
+        vocab_size = self._vocab_size or len(self._model.key_to_index)
+        return max(0.0, 1.0 - math.log(rank + 1) / math.log(vocab_size + 1))
 
 
 class GameEngine:

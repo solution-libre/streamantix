@@ -30,7 +30,6 @@ TWITCH_CHANNEL: str = os.getenv("TWITCH_CHANNEL", "")
 COMMAND_PREFIX: str = os.getenv("COMMAND_PREFIX", "!sx")
 COOLDOWN: int = int(os.getenv("COOLDOWN", "5"))
 DIFFICULTY: str = os.getenv("DIFFICULTY", "easy")
-SCORING_TOP_N: int = int(os.getenv("SCORING_TOP_N", "10000"))
 MODEL_PATH: str = os.getenv(
     "MODEL_PATH", "models/frWac_no_postag_no_phrase_700_skip_cut50.bin"
 )
