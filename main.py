@@ -53,6 +53,7 @@ def _resolve_token() -> str:
 
 def main() -> None:
     """Start the Twitch bot, and optionally the overlay server."""
+    config.validate()
     if len(sys.argv) > 1 and sys.argv[1] == "auth-login":
         # CLI mode: force a new login flow and exit.
         if not config.TWITCH_CLIENT_ID or not config.TWITCH_CLIENT_SECRET:

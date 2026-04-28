@@ -5,7 +5,11 @@ import pathlib
 
 from gensim.models import KeyedVectors
 
+import config
 from game.word_utils import build_cleaned_key_map, clean_word
+
+_DEFAULT_MODEL_PATH: str = config.MODEL_PATH
+_DEFAULT_TOP_N: int = config.SCORING_TOP_N
 
 
 class SemanticEngine:
@@ -28,17 +32,14 @@ class SemanticEngine:
     def __init__(
         self,
         model_path: str | pathlib.Path | None = None,
-        top_n: int | None = None,
+        top_n: int = _DEFAULT_TOP_N,
     ) -> None:
-        import config as _cfg
-
-        resolved_top_n: int = top_n if top_n is not None else _cfg.SCORING_TOP_N
-        if resolved_top_n <= 0:
-            raise ValueError(f"top_n must be a positive integer, got {resolved_top_n}")
-        self._model_path = str(model_path or _cfg.MODEL_PATH)
+        if top_n <= 0:
+            raise ValueError(f"top_n must be a positive integer, got {top_n}")
+        self._model_path = str(model_path or _DEFAULT_MODEL_PATH)
         self._model: KeyedVectors | None = None
         self._cleaned_key_map: dict[str, str] = {}
-        self._top_n: int = resolved_top_n
+        self._top_n: int = top_n
 
     # ------------------------------------------------------------------
     # Model management
