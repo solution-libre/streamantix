@@ -17,8 +17,8 @@ uvicorn = "^0.41"
 websockets = "^14.0"
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^8.0"
-pytest-asyncio = "^0.23"
+pytest = ">=8,<10"
+pytest-asyncio = ">=0.24"
 pytest-cov = "^5.0"
 httpx = "^0.28"
 
