@@ -59,6 +59,30 @@ class TestSemanticEngineLoading:
         with pytest.raises(RuntimeError, match="not loaded"):
             engine.score_guess("chat", "chien")
 
+    def test_is_in_vocab_raises_when_not_loaded(self):
+        engine = SemanticEngine(model_path="/nonexistent/path.bin")
+        with pytest.raises(RuntimeError, match="not loaded"):
+            engine.is_in_vocab("chat")
+
+
+# ---------------------------------------------------------------------------
+# SemanticEngine – is_in_vocab
+# ---------------------------------------------------------------------------
+
+class TestSemanticEngineIsInVocab:
+    def test_known_word_returns_true(self):
+        engine = _make_engine()
+        assert engine.is_in_vocab("chat") is True
+
+    def test_unknown_word_returns_false(self):
+        engine = _make_engine()
+        assert engine.is_in_vocab("licorne") is False
+
+    def test_all_vocabulary_words_are_in_vocab(self):
+        engine = _make_engine()
+        for word in ["chat", "chien", "maison", "voiture"]:
+            assert engine.is_in_vocab(word) is True
+
 
 # ---------------------------------------------------------------------------
 # SemanticEngine – similarity

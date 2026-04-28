@@ -58,6 +58,25 @@ class SemanticEngine:
     # Public API
     # ------------------------------------------------------------------
 
+    def is_in_vocab(self, word: str) -> bool:
+        """Return ``True`` if *word* is present in the model vocabulary.
+
+        The word is cleaned/normalised before lookup, matching the same
+        pre-processing applied by :meth:`score_guess`.
+
+        Args:
+            word: The word to check.
+
+        Returns:
+            ``True`` if the cleaned form of *word* maps to a vocabulary key.
+
+        Raises:
+            RuntimeError: If the model has not been loaded yet.
+        """
+        if self._model is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+        return self._cleaned_key_map.get(clean_word(word)) is not None
+
     def similarity(self, word_a: str, word_b: str) -> float | None:
         """Return the cosine similarity between two words.
 

@@ -726,6 +726,55 @@ class TestStartGameState:
 
 
 # ---------------------------------------------------------------------------
+# OOV filtering in start_game
+# ---------------------------------------------------------------------------
+
+class _OovAwareScorer:
+    """Scorer that returns None for words not in the valid set (simulates OOV)."""
+
+    def __init__(self, valid_words: set[str]) -> None:
+        self._valid = valid_words
+
+    def score_guess(self, guess: str, target: str) -> float | None:
+        from game.word_utils import clean_word
+        if clean_word(guess) in self._valid:
+            return 0.5
+        return None
+
+    def is_in_vocab(self, word: str) -> bool:
+        from game.word_utils import clean_word
+        return clean_word(word) in self._valid
+
+
+@pytest.mark.asyncio
+class TestStartOovFiltering:
+    async def test_all_words_oov_sends_error_and_aborts(self):
+        bot = _make_bot()
+        bot._game_state = GameState(scorer=_OovAwareScorer(set()))
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("bot.bot.load_word_list", return_value=["chat", "licorne", "dragon"]):
+            await _start_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "out of vocabulary" in message.lower()
+        assert bot._game_state.target_word is None
+
+    async def test_partial_oov_starts_game_with_valid_word(self):
+        bot = _make_bot()
+        bot._game_state = GameState(scorer=_OovAwareScorer({"chat", "dragon"}))
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("bot.bot.load_word_list", return_value=["chat", "licorne", "dragon"]):
+            await _start_fn(bot, ctx)
+        assert bot._game_state.target_word in {"chat", "dragon"}
+
+    async def test_no_scorer_skips_oov_filter(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("bot.bot.load_word_list", return_value=["chat", "licorne", "dragon"]):
+            await _start_fn(bot, ctx)
+        assert bot._game_state.target_word in {"chat", "licorne", "dragon"}
+
+
+# ---------------------------------------------------------------------------
 # hint command
 # ---------------------------------------------------------------------------
 
