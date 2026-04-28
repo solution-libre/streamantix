@@ -218,4 +218,4 @@ class GameState:
             A list of at most *n* :class:`GuessEntry` objects.
         """
         scored = [e for e in self._history if e.score is not None]
-        return sorted(scored, key=lambda e: e.score or 0.0, reverse=True)[:n]
+        return sorted(scored, key=lambda e: e.score, reverse=True)[:n]
