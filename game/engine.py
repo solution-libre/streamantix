@@ -1,17 +1,15 @@
 """Game engine: state management and guess scoring."""
 
 import math
-import os
 import pathlib
 
 from gensim.models import KeyedVectors
 
+import config
 from game.word_utils import build_cleaned_key_map, clean_word
 
-_DEFAULT_MODEL_PATH = os.getenv(
-    "MODEL_PATH", "models/frWac_no_postag_no_phrase_700_skip_cut50.bin"
-)
-_DEFAULT_TOP_N: int = int(os.getenv("SCORING_TOP_N", "100000"))
+_DEFAULT_MODEL_PATH: str = config.MODEL_PATH
+_DEFAULT_TOP_N: int = config.SCORING_TOP_N
 
 
 class SemanticEngine:
@@ -27,11 +25,15 @@ class SemanticEngine:
             path when the variable is unset.
         top_n: Number of nearest neighbours used for rank scoring.  Words
             ranked beyond this threshold return ``0.0``.  Defaults to the
-            value of the ``SCORING_TOP_N`` environment variable, or ``1000``
+            value of the ``SCORING_TOP_N`` environment variable, or ``10 000``
             when unset.
     """
 
-    def __init__(self, model_path: str | pathlib.Path | None = None, top_n: int = _DEFAULT_TOP_N) -> None:
+    def __init__(
+        self,
+        model_path: str | pathlib.Path | None = None,
+        top_n: int = _DEFAULT_TOP_N,
+    ) -> None:
         if top_n <= 0:
             raise ValueError(f"top_n must be a positive integer, got {top_n}")
         self._model_path = str(model_path or _DEFAULT_MODEL_PATH)
@@ -93,8 +95,9 @@ class SemanticEngine:
         either word is missing from the vocabulary.
 
         The score is computed over the top-``top_n`` nearest neighbours of
-        *target*: a score of ``0.99`` means the guess is among the top 1 %
-        of the nearest words.  Words ranked beyond ``top_n`` return ``0.0``.
+        *target* using a logarithmic scale: the closest neighbour scores ~94%
+        and the ``top_n``-th neighbour scores 0%.  Words ranked beyond
+        ``top_n`` return ``0.0``.
 
         Args:
             guess: The word submitted by the player.
@@ -103,12 +106,14 @@ class SemanticEngine:
         Returns:
             A float in ``[0, 1]``, or ``None``.
         """
-        if clean_word(guess) == clean_word(target):
+        clean_guess = clean_word(guess)
+        clean_target = clean_word(target)
+        if clean_guess == clean_target:
             return 1.0
         if self._model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
-        key_guess = self._cleaned_key_map.get(clean_word(guess))
-        key_target = self._cleaned_key_map.get(clean_word(target))
+        key_guess = self._cleaned_key_map.get(clean_guess)
+        key_target = self._cleaned_key_map.get(clean_target)
         if key_guess is None or key_target is None:
             return None
         rank = self._model.rank(key_target, key_guess)

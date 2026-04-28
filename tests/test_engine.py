@@ -49,10 +49,23 @@ class TestSemanticEngineLoading:
         engine = _make_engine()
         assert engine.is_loaded
 
-    def test_score_guess_raises_when_not_loaded(self):
+    def test_similarity_raises_when_not_loaded(self):
         engine = SemanticEngine(model_path="/nonexistent/path.bin")
         with pytest.raises(RuntimeError, match="not loaded"):
             engine.similarity("chat", "chien")
+
+    def test_score_guess_raises_when_not_loaded(self):
+        engine = SemanticEngine(model_path="/nonexistent/path.bin")
+        with pytest.raises(RuntimeError, match="not loaded"):
+            engine.score_guess("chat", "chien")
+
+    def test_invalid_top_n_raises_value_error(self):
+        with pytest.raises(ValueError, match="top_n must be a positive integer"):
+            SemanticEngine(model_path="/nonexistent/path.bin", top_n=0)
+
+    def test_negative_top_n_raises_value_error(self):
+        with pytest.raises(ValueError, match="top_n must be a positive integer"):
+            SemanticEngine(model_path="/nonexistent/path.bin", top_n=-1)
 
 
 # ---------------------------------------------------------------------------
@@ -107,6 +120,18 @@ class TestSemanticEngineSimilarity:
     def test_unknown_word_returns_none(self):
         engine = _make_engine()
         assert engine.score_guess("inconnu", "chat") is None
+
+    def test_similarity_unknown_word_returns_none(self):
+        engine = _make_engine()
+        assert engine.similarity("inconnu", "chat") is None
+        assert engine.similarity("chat", "inconnu") is None
+
+    def test_score_at_exactly_top_n_returns_zero(self):
+        """At rank == top_n the log formula evaluates to exactly 0.0."""
+        engine = _make_engine()
+        engine._top_n = 2  # maison has rank 2; rank == top_n
+        score = engine.score_guess("maison", "chat")
+        assert score == pytest.approx(0.0)
 
     def test_similarity_is_symmetric(self):
         engine = _make_engine()
