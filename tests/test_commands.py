@@ -693,7 +693,7 @@ class TestStartDifficulty:
     async def test_medium_difficulty_accepted(self):
         bot = _make_bot()
         ctx = _make_ctx(is_broadcaster=True)
-        with patch("random.choice", return_value="ambiguïté"):
+        with patch("random.choice", return_value="rêve"):
             await _start_fn(bot, ctx, "medium")
         assert bot._game_state.difficulty == Difficulty.MEDIUM
 
@@ -746,6 +746,55 @@ class TestStartGameState:
             await _start_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "!sx" in message
+
+
+# ---------------------------------------------------------------------------
+# OOV filtering in start_game
+# ---------------------------------------------------------------------------
+
+class _OovAwareScorer:
+    """Scorer that returns None for words not in the valid set (simulates OOV)."""
+
+    def __init__(self, valid_words: set[str]) -> None:
+        self._valid = valid_words
+
+    def score_guess(self, guess: str, target: str) -> float | None:
+        from game.word_utils import clean_word
+        if clean_word(guess) in self._valid:
+            return 0.5
+        return None
+
+    def is_in_vocab(self, word: str) -> bool:
+        from game.word_utils import clean_word
+        return clean_word(word) in self._valid
+
+
+@pytest.mark.asyncio
+class TestStartOovFiltering:
+    async def test_all_words_oov_sends_error_and_aborts(self):
+        bot = _make_bot()
+        bot._game_state = GameState(scorer=_OovAwareScorer(set()))
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("bot.bot.load_word_list", return_value=["chat", "licorne", "dragon"]):
+            await _start_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "out of vocabulary" in message.lower()
+        assert bot._game_state.target_word is None
+
+    async def test_partial_oov_starts_game_with_valid_word(self):
+        bot = _make_bot()
+        bot._game_state = GameState(scorer=_OovAwareScorer({"chat", "dragon"}))
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("bot.bot.load_word_list", return_value=["chat", "licorne", "dragon"]):
+            await _start_fn(bot, ctx)
+        assert bot._game_state.target_word in {"chat", "dragon"}
+
+    async def test_no_scorer_skips_oov_filter(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_broadcaster=True)
+        with patch("bot.bot.load_word_list", return_value=["chat", "licorne", "dragon"]):
+            await _start_fn(bot, ctx)
+        assert bot._game_state.target_word in {"chat", "licorne", "dragon"}
 
 
 # ---------------------------------------------------------------------------
@@ -866,8 +915,8 @@ class TestDifficultyValidation:
     def test_hard_is_valid(self):
         assert _validate_difficulty("hard") is None
 
-    def test_medium_is_invalid(self):
-        assert _validate_difficulty("medium") is not None
+    def test_medium_is_valid(self):
+        assert _validate_difficulty("medium") is None
 
     def test_empty_is_invalid(self):
         assert _validate_difficulty("") is not None
@@ -914,7 +963,7 @@ class TestSetdifficultyValidation:
     async def test_invalid_difficulty_rejected(self):
         bot = _make_bot()
         ctx = _make_ctx(is_mod=True)
-        await _setdifficulty_fn(bot, ctx, "medium")
+        await _setdifficulty_fn(bot, ctx, "extreme")
         assert bot._next_difficulty == Difficulty.EASY  # unchanged
         ctx.send.assert_called_once()
         assert "invalid" in ctx.send.call_args[0][0].lower()
@@ -937,6 +986,13 @@ class TestSetdifficultyValidation:
         ctx = _make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx, "hard")
         assert bot._next_difficulty == Difficulty.HARD
+        ctx.send.assert_called_once()
+
+    async def test_valid_medium_accepted(self):
+        bot = _make_bot()
+        ctx = _make_ctx(is_mod=True)
+        await _setdifficulty_fn(bot, ctx, "medium")
+        assert bot._next_difficulty == Difficulty.MEDIUM
         ctx.send.assert_called_once()
 
     async def test_confirmation_message_contains_difficulty(self):

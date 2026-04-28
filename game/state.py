@@ -28,6 +28,10 @@ class Scorer(Protocol):
         """Return a similarity score in ``[0, 1]``, or ``None`` if unknown."""
         ...
 
+    def is_in_vocab(self, word: str) -> bool:
+        """Return ``True`` if *word* is present in the model vocabulary."""
+        ...
+
 
 @dataclass
 class GuessEntry:
@@ -81,6 +85,11 @@ class GameState:
         self._difficulty: Difficulty | None = None
         self._history: list[GuessEntry] = []
         self._is_found: bool = False
+
+    @property
+    def scorer(self) -> Scorer | None:
+        """Return the configured scorer, or ``None`` if none was provided."""
+        return self._scorer
 
     # ------------------------------------------------------------------
     # Game lifecycle
@@ -209,4 +218,4 @@ class GameState:
             A list of at most *n* :class:`GuessEntry` objects.
         """
         scored = [e for e in self._history if e.score is not None]
-        return sorted(scored, key=lambda e: e.score or 0.0, reverse=True)[:n]
+        return sorted(scored, key=lambda e: e.score, reverse=True)[:n]
