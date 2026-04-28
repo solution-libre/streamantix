@@ -32,7 +32,6 @@ class SemanticEngine:
         self._model: KeyedVectors | None = None
         self._cleaned_key_map: dict[str, str] = {}
         self._vocab_size: int | None = None
-        self._max_score: float | None = None
 
     # ------------------------------------------------------------------
     # Model management
@@ -49,7 +48,6 @@ class SemanticEngine:
         )
         self._cleaned_key_map = build_cleaned_key_map(self._model.key_to_index)
         self._vocab_size = len(self._model.key_to_index)
-        self._max_score = 1.0 - math.log(2) / math.log(self._vocab_size + 1)
 
     @property
     def is_loaded(self) -> bool:
@@ -86,14 +84,23 @@ class SemanticEngine:
         """Score a player's guess against the target word.
 
         Returns ``1.0`` for an exact (cleaned) match, or a **logarithmic rank
-        score** rescaled to ``(0, 0.99]`` for a non-exact in-vocabulary guess.
+        score** in ``(0, 0.99]`` for a non-exact in-vocabulary guess.
         Returns ``None`` when either word is missing from the vocabulary.
 
-        The raw formula ``1 − log(rank+1) / log(V+1)`` is rescaled so that
-        rank 1 (the closest vocabulary neighbour) maps to exactly ``0.99``
-        and the furthest possible word maps to near ``0``.  ``1.0`` is
-        reserved exclusively for exact matches.  The closest synonym scores
-        ``0.99`` (99 %); rank 10 000 ≈ 24 %; the furthest word ≈ 0.003 %.
+        Formula: ``0.99 * log((V+9) / (rank+9)) / log((V+9) / 10)`` where V
+        is the vocabulary size.  The offset of 9 ensures the step from rank 1
+        to rank 2 is ≤ 1 percentage point (no integer % gaps) for any
+        V ≥ 123 000.  ``1.0`` is reserved exclusively for exact matches.
+
+        Score distribution (frWac, V ≈ 150 000):
+          rank      1 →  99 %
+          rank      2 →  98 %
+          rank      3 →  97 %
+          rank     10 →  92 %
+          rank    100 →  74 %
+          rank  1 000 →  51 %
+          rank 10 000 →  27 %
+          rank 149 999 →   0.0001 %  (always > 0)
 
         Args:
             guess: The word submitted by the player.
@@ -114,9 +121,7 @@ class SemanticEngine:
             return None
         rank = self._model.rank(key_target, key_guess)
         vocab_size = self._vocab_size or len(self._model.key_to_index)
-        max_score = self._max_score or (1.0 - math.log(2) / math.log(vocab_size + 1))
-        score_raw = max(0.0, 1.0 - math.log(rank + 1) / math.log(vocab_size + 1))
-        return score_raw * 0.99 / max_score
+        return 0.99 * math.log((vocab_size + 9) / (rank + 9)) / math.log((vocab_size + 9) / 10)
 
 
 class GameEngine:

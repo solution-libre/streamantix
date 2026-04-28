@@ -33,7 +33,6 @@ def _make_engine() -> SemanticEngine:
     engine._model = kv
     engine._cleaned_key_map = {w: w for w in words}
     engine._vocab_size = len(kv.key_to_index)  # 4
-    engine._max_score = None  # resolved lazily in score_guess
     return engine
 
 
@@ -92,10 +91,10 @@ class TestSemanticEngineSimilarity:
             assert 0.0 <= score <= 1.0
 
     def test_score_is_log_rank(self):
-        """score_guess returns a logarithmic rank score rescaled so rank 1 = 0.99.
+        """score_guess uses formula E: 0.99*log((V+9)/(r+9))/log((V+9)/10).
 
         With vocab_size=4, chien (rank 1) scores exactly 0.99 and maison
-        (rank 2) scores less, so chien must outrank maison.
+        (rank 2) scores less, so chien must strictly outrank maison.
         """
         engine = _make_engine()
         score_chien = engine.score_guess("chien", "chat")   # rank 1 → 0.99
