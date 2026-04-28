@@ -1,5 +1,6 @@
 """Game engine: state management and guess scoring."""
 
+import math
 import os
 import pathlib
 
@@ -10,7 +11,7 @@ from game.word_utils import build_cleaned_key_map, clean_word
 _DEFAULT_MODEL_PATH = os.getenv(
     "MODEL_PATH", "models/frWac_no_postag_no_phrase_700_skip_cut50.bin"
 )
-_DEFAULT_TOP_N: int = int(os.getenv("SCORING_TOP_N", "1000"))
+_DEFAULT_TOP_N: int = int(os.getenv("SCORING_TOP_N", "100000"))
 
 
 class SemanticEngine:
@@ -113,7 +114,7 @@ class SemanticEngine:
         rank = self._model.rank(key_target, key_guess)
         if rank > self._top_n:
             return 0.0
-        return (self._top_n - rank) / self._top_n
+        return max(0.0, 1.0 - math.log(rank + 1) / math.log(self._top_n + 1))
 
 
 class GameEngine:

@@ -32,7 +32,7 @@ def _make_engine() -> SemanticEngine:
     engine._model_path = "<in-memory>"
     engine._model = kv
     engine._cleaned_key_map = {w: w for w in words}
-    engine._top_n = len(kv.key_to_index) - 1  # 3 (4 words minus the target)
+    engine._top_n = len(kv.key_to_index)  # 4 (gives rank 1 → ~0.57 > 0.5, rank 2 → ~0.32 < 0.5 with log formula)
     return engine
 
 
@@ -84,16 +84,15 @@ class TestSemanticEngineSimilarity:
             assert 0.0 <= score <= 1.0
 
     def test_score_is_percentile_rank(self):
-        """score_guess returns a percentile rank, not raw cosine similarity.
+        """score_guess returns a log-rank score, not raw cosine similarity.
 
-        With 4 words in the test vocabulary (chat, chien, maison, voiture),
-        effective_vocab = 3 (excluding the target 'chat' itself).  chien is
-        the closest non-target word (rank 1/3 → score 2/3) and maison is
-        less similar (rank 2/3 → score 1/3), so chien must outrank maison.
+        With top_n=4 and the log formula, chien (rank 1) scores
+        1 - log(2)/log(5) ≈ 0.57 and maison (rank 2) scores
+        1 - log(3)/log(5) ≈ 0.32, so chien must outrank maison.
         """
         engine = _make_engine()
-        score_chien = engine.score_guess("chien", "chat")   # rank 1/3 → 2/3
-        score_maison = engine.score_guess("maison", "chat") # rank 2/3 → 1/3
+        score_chien = engine.score_guess("chien", "chat")   # rank 1 → ~0.57
+        score_maison = engine.score_guess("maison", "chat") # rank 2 → ~0.32
         assert score_chien is not None
         assert score_maison is not None
         assert score_chien > score_maison
