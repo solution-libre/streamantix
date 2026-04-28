@@ -32,6 +32,7 @@ def _make_engine() -> SemanticEngine:
     engine._model_path = "<in-memory>"
     engine._model = kv
     engine._cleaned_key_map = {w: w for w in words}
+    engine._vocab_size = len(kv.key_to_index)  # 4
     return engine
 
 
@@ -48,10 +49,15 @@ class TestSemanticEngineLoading:
         engine = _make_engine()
         assert engine.is_loaded
 
-    def test_score_guess_raises_when_not_loaded(self):
+    def test_similarity_raises_when_not_loaded(self):
         engine = SemanticEngine(model_path="/nonexistent/path.bin")
         with pytest.raises(RuntimeError, match="not loaded"):
             engine.similarity("chat", "chien")
+
+    def test_score_guess_raises_when_not_loaded(self):
+        engine = SemanticEngine(model_path="/nonexistent/path.bin")
+        with pytest.raises(RuntimeError, match="not loaded"):
+            engine.score_guess("chat", "chien")
 
 
 # ---------------------------------------------------------------------------
@@ -71,9 +77,11 @@ class TestSemanticEngineSimilarity:
 
     def test_unrelated_words_return_low_score(self):
         engine = _make_engine()
-        score = engine.score_guess("maison", "chat")
-        assert score is not None
-        assert score < 0.5
+        score_close = engine.score_guess("chien", "chat")
+        score_unrelated = engine.score_guess("maison", "chat")
+        assert score_close is not None
+        assert score_unrelated is not None
+        assert score_unrelated < score_close
 
     def test_score_is_between_zero_and_one(self):
         engine = _make_engine()
@@ -82,24 +90,35 @@ class TestSemanticEngineSimilarity:
             assert score is not None
             assert 0.0 <= score <= 1.0
 
-    def test_score_is_percentile_rank(self):
-        """score_guess returns a percentile rank, not raw cosine similarity.
+    def test_score_is_log_rank(self):
+        """score_guess uses formula E: 0.99*log((V+9)/(r+9))/log((V+9)/10).
 
-        With 4 words in the test vocabulary (chat, chien, maison, voiture),
-        effective_vocab = 3 (excluding the target 'chat' itself).  chien is
-        the closest non-target word (rank 1/3 → score 2/3) and maison is
-        less similar (rank 2/3 → score 1/3), so chien must outrank maison.
+        With vocab_size=4, chien (rank 1) scores exactly 0.99 and maison
+        (rank 2) scores less, so chien must strictly outrank maison.
         """
         engine = _make_engine()
-        score_chien = engine.score_guess("chien", "chat")   # rank 1/3 → 2/3
-        score_maison = engine.score_guess("maison", "chat") # rank 2/3 → 1/3
+        score_chien = engine.score_guess("chien", "chat")   # rank 1 → 0.99
+        score_maison = engine.score_guess("maison", "chat") # rank 2 → lower
         assert score_chien is not None
         assert score_maison is not None
         assert score_chien > score_maison
 
+    def test_all_vocab_words_score_above_zero(self):
+        """Every in-vocabulary word scores strictly > 0."""
+        engine = _make_engine()
+        for word in ["chien", "maison", "voiture"]:
+            score = engine.score_guess(word, "chat")
+            assert score is not None
+            assert score > 0.0, f"{word!r} scored 0"
+
     def test_unknown_word_returns_none(self):
         engine = _make_engine()
         assert engine.score_guess("inconnu", "chat") is None
+
+    def test_similarity_unknown_word_returns_none(self):
+        engine = _make_engine()
+        assert engine.similarity("inconnu", "chat") is None
+        assert engine.similarity("chat", "inconnu") is None
 
     def test_similarity_is_symmetric(self):
         engine = _make_engine()
@@ -133,8 +152,9 @@ class TestScoreGuess:
 
     def test_unrelated_word_returns_low_score(self):
         ge = GameEngine("chat", semantic_engine=_make_engine())
-        score = ge.score_guess("maison")
-        assert score < 0.5
+        score_close = ge.score_guess("chien")
+        score_unrelated = ge.score_guess("maison")
+        assert score_unrelated < score_close
 
     def test_score_is_between_zero_and_one(self):
         ge = GameEngine("chat", semantic_engine=_make_engine())

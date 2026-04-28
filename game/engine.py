@@ -1,15 +1,14 @@
 """Game engine: state management and guess scoring."""
 
-import os
+import math
 import pathlib
 
 from gensim.models import KeyedVectors
 
+import config
 from game.word_utils import build_cleaned_key_map, clean_word
 
-_DEFAULT_MODEL_PATH = os.getenv(
-    "MODEL_PATH", "models/frWac_no_postag_no_phrase_700_skip_cut50.bin"
-)
+_DEFAULT_MODEL_PATH: str = config.MODEL_PATH
 
 
 class SemanticEngine:
@@ -25,10 +24,14 @@ class SemanticEngine:
             path when the variable is unset.
     """
 
-    def __init__(self, model_path: str | pathlib.Path | None = None) -> None:
+    def __init__(
+        self,
+        model_path: str | pathlib.Path | None = None,
+    ) -> None:
         self._model_path = str(model_path or _DEFAULT_MODEL_PATH)
         self._model: KeyedVectors | None = None
         self._cleaned_key_map: dict[str, str] = {}
+        self._vocab_size: int | None = None
 
     # ------------------------------------------------------------------
     # Model management
@@ -44,6 +47,7 @@ class SemanticEngine:
             self._model_path, binary=True, unicode_errors="ignore"
         )
         self._cleaned_key_map = build_cleaned_key_map(self._model.key_to_index)
+        self._vocab_size = len(self._model.key_to_index)
 
     @property
     def is_loaded(self) -> bool:
@@ -79,39 +83,45 @@ class SemanticEngine:
     def score_guess(self, guess: str, target: str) -> float | None:
         """Score a player's guess against the target word.
 
-        Returns ``1.0`` for an exact (cleaned) match, or a **percentile rank**
-        in ``[0, 1)`` for a non-exact guess.  Returns ``None`` when either
-        word is missing from the vocabulary.
+        Returns ``1.0`` for an exact (cleaned) match, or a **logarithmic rank
+        score** in ``(0, 0.99]`` for a non-exact in-vocabulary guess.
+        Returns ``None`` when either word is missing from the vocabulary.
 
-        The percentile rank expresses what fraction of the vocabulary is *less
-        similar* to *target* than *guess* is.  For example, a score of
-        ``0.99`` means the guess is closer to the target than 99 % of all
-        words in the model.
+        Formula: ``0.99 * log((V+9) / (rank+9)) / log((V+9) / 10)`` where V
+        is the vocabulary size.  The offset of 9 ensures the step from rank 1
+        to rank 2 is ≤ 1 percentage point (no integer % gaps) for any
+        V ≥ 123 000.  ``1.0`` is reserved exclusively for exact matches.
+
+        Score distribution (frWac, V ≈ 150 000):
+          rank      1 →  99 %
+          rank      2 →  98 %
+          rank      3 →  97 %
+          rank     10 →  92 %
+          rank    100 →  74 %
+          rank  1 000 →  51 %
+          rank 10 000 →  27 %
+          rank 149 999 →   0.0001 %  (always > 0)
 
         Args:
             guess: The word submitted by the player.
             target: The secret target word.
 
         Returns:
-            A float in ``[0, 1]``, or ``None``.
+            A float in ``(0, 0.99]``, or ``None`` if either word is OOV.
         """
-        if clean_word(guess) == clean_word(target):
+        clean_guess = clean_word(guess)
+        clean_target = clean_word(target)
+        if clean_guess == clean_target:
             return 1.0
         if self._model is None:
             raise RuntimeError("Model not loaded. Call load() first.")
-        key_guess = self._cleaned_key_map.get(clean_word(guess))
-        key_target = self._cleaned_key_map.get(clean_word(target))
+        key_guess = self._cleaned_key_map.get(clean_guess)
+        key_target = self._cleaned_key_map.get(clean_target)
         if key_guess is None or key_target is None:
             return None
         rank = self._model.rank(key_target, key_guess)
-        # effective_vocab excludes the target word itself, matching how
-        # gensim's closer_than() (used internally by rank()) omits key1.
-        # Guard against degenerate single-word vocabularies where no ranking
-        # is meaningful and division by zero would occur.
-        effective_vocab = len(self._model.key_to_index) - 1
-        if effective_vocab <= 0:
-            return None
-        return max(0.0, min(1.0, (effective_vocab - rank) / effective_vocab))
+        vocab_size = self._vocab_size or len(self._model.key_to_index)
+        return 0.99 * math.log((vocab_size + 9) / (rank + 9)) / math.log((vocab_size + 9) / 10)
 
 
 class GameEngine:

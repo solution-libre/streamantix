@@ -13,9 +13,20 @@ def _require(name: str) -> str:
     return value
 
 
+def validate() -> None:
+    """Validate all required environment variables.
+
+    Must be called once at application startup, before any Twitch
+    connection is attempted. Raises RuntimeError if any required
+    variable is missing.
+    """
+    global TWITCH_CHANNEL
+    TWITCH_CHANNEL = _require("TWITCH_CHANNEL")
+
+
 # Optional: kept for users who still want to supply a token manually.
 TWITCH_TOKEN: str | None = os.getenv("TWITCH_TOKEN")
-TWITCH_CHANNEL: str = _require("TWITCH_CHANNEL")
+TWITCH_CHANNEL: str = os.getenv("TWITCH_CHANNEL", "")
 COMMAND_PREFIX: str = os.getenv("COMMAND_PREFIX", "!sx")
 COOLDOWN: int = int(os.getenv("COOLDOWN", "5"))
 DIFFICULTY: str = os.getenv("DIFFICULTY", "easy")
