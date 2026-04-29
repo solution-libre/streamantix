@@ -50,6 +50,8 @@ class TestBotOverlayIntegration:
             data = json.loads(ws.receive_text())
 
         assert data["attempt_count"] == 1
+        assert data["last_guess"]["word"] == "chien"
+        assert data["last_guess"]["user"] == "alice"
 
     def test_win_broadcasts_found_state(self):
         overlay = OverlayServer()
@@ -80,36 +82,28 @@ class TestBotOverlayIntegration:
 
 
 # ---------------------------------------------------------------------------
-# TestOverlayWebSocketWithBot — verify messages over the live WS connection
+# TestOverlayWebSocketMultiClient — multiple simultaneous WS connections
 # ---------------------------------------------------------------------------
 
 
-class TestOverlayWebSocketWithBot:
-    def test_connected_client_receives_start_event(self):
-        overlay = OverlayServer()
-        bot = make_bot(cooldown=0, on_state_change=overlay.broadcast)
-        client = TestClient(overlay.app)
-
-        ctx = make_ctx(is_broadcaster=True)
-        with client.websocket_connect("/ws") as ws:
-            with patch("bot.bot.load_word_list", return_value=["chat"]):
-                asyncio.run(_start_fn(bot, ctx))
-            data = json.loads(ws.receive_text())
-
-        assert data["status"] == "running"
-
-    def test_connected_client_receives_win_event(self):
+class TestOverlayWebSocketMultiClient:
+    def test_broadcast_reaches_all_connected_clients(self):
+        """All connected WebSocket clients receive the same broadcast payload."""
         overlay = OverlayServer()
         bot = make_bot(cooldown=0, on_state_change=overlay.broadcast)
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         client = TestClient(overlay.app)
 
         ctx = make_ctx(author_name="alice")
-        with client.websocket_connect("/ws") as ws:
-            asyncio.run(_guess_fn(bot, ctx, "chat"))
-            data = json.loads(ws.receive_text())
+        with client.websocket_connect("/ws") as ws1:
+            with client.websocket_connect("/ws") as ws2:
+                asyncio.run(_guess_fn(bot, ctx, "chat"))
+                data1 = json.loads(ws1.receive_text())
+                data2 = json.loads(ws2.receive_text())
 
-        assert data["status"] == "found"
+        assert data1["status"] == "found"
+        assert data2["status"] == "found"
+        assert data1["target_word"] == data2["target_word"] == "chat"
 
     def test_late_client_receives_cached_state(self):
         overlay = OverlayServer()

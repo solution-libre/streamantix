@@ -117,12 +117,11 @@ class TestHintAndStatus:
         ctx = make_ctx()
         await _hint_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
-        # All three words must appear in the message
-        assert "c" in message
-        assert "ch" in message
-        assert "cha" in message
-        # "1." must appear (top rank marker)
-        assert "1." in message
+        # Verify rank markers and each word appears as a distinct entry
+        # Expected format: "1. cha (75%) | 2. ch (50%) | 3. c (25%)"
+        assert "1. cha" in message
+        assert "2. ch" in message
+        assert "3. c " in message
 
     async def test_status_shows_attempt_count(self):
         bot = make_bot(cooldown=0, scorer=FakeScorer())
@@ -134,7 +133,7 @@ class TestHintAndStatus:
         ctx = make_ctx()
         await _status_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
-        assert "2" in message
+        assert "2 attempt" in message.lower()
 
     async def test_status_reports_no_game_when_inactive(self):
         bot = make_bot()
