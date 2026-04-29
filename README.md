@@ -28,21 +28,21 @@ Players guess a secret word by submitting words in chat. The bot uses word embed
    cp .env.example .env
    ```
 
-   | Variable               | Description                                                    | Default |
-   |------------------------|----------------------------------------------------------------|---------|
-   | `TWITCH_TOKEN`         | Manual OAuth token (`oauth:…`) — optional if using OAuth flow  | —       |
-   | `TWITCH_CHANNEL`       | Twitch channel name to join — **required**                     | —       |
-   | `TWITCH_CLIENT_ID`     | Twitch app client ID (OAuth flow)                              | —       |
-   | `TWITCH_CLIENT_SECRET` | Twitch app client secret (OAuth flow)                          | —       |
-   | `TWITCH_REDIRECT_URI`  | OAuth redirect URI                                             | `http://localhost:4343/callback` |
-   | `TWITCH_SCOPES`        | Space-separated OAuth scopes                                   | `chat:read chat:edit` |
-   | `TWITCH_TOKEN_PATH`    | Path to the JSON token storage file                            | `.secrets/twitch_tokens.json` |
-   | `COMMAND_PREFIX`       | Prefix for bot commands                                        | `!sx`   |
-   | `COOLDOWN`             | Cooldown between guesses (seconds)                             | `5`     |
-   | `DIFFICULTY`           | Game difficulty (`easy`=facile, `hard`=difficile)              | `easy`  |
-   | `MODEL_PATH`           | Path to the Word2Vec binary model file                         | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
-   | `OVERLAY_ENABLED`      | Start the web overlay server                                   | `false` |
-   | `OVERLAY_PORT`         | TCP port for the overlay server                                | `8080`  |
+   | Variable               | Description                                                   | Default |
+   |------------------------|---------------------------------------------------------------|---------|
+   | `TWITCH_TOKEN`         | Manual OAuth token (`oauth:…`) — optional if using OAuth flow | —       |
+   | `TWITCH_CHANNEL`       | Twitch channel name to join — **required**                    | —       |
+   | `TWITCH_CLIENT_ID`     | Twitch app client ID (OAuth flow)                             | —       |
+   | `TWITCH_CLIENT_SECRET` | Twitch app client secret (OAuth flow)                         | —       |
+   | `TWITCH_REDIRECT_URI`  | OAuth redirect URI                                            | `http://localhost:4343/callback` |
+   | `TWITCH_SCOPES`        | Space-separated OAuth scopes                                  | `chat:read chat:edit` |
+   | `TWITCH_TOKEN_PATH`    | Path to the JSON token storage file                           | `.secrets/twitch_tokens.json` |
+   | `COMMAND_PREFIX`       | Prefix for bot commands                                       | `!sx`   |
+   | `COOLDOWN`             | Cooldown between guesses (seconds)                            | `5`     |
+   | `DIFFICULTY`           | Game difficulty (`easy`=facile, `hard`=difficile)             | `easy`  |
+   | `MODEL_PATH`           | Path to the Word2Vec binary model file                        | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+   | `OVERLAY_ENABLED`      | Start the web overlay server                                  | `false` |
+   | `OVERLAY_PORT`         | TCP port for the overlay server                               | `8080`  |
 
 ## Twitch Authentication
 
@@ -125,13 +125,13 @@ The `.secrets/` directory is gitignored to prevent accidentally committing token
 
    ### Model details
 
-   | Property       | Value |
-   |----------------|-------|
-   | Filename       | `frWac_no_postag_no_phrase_700_skip_cut50.bin` |
-   | Source         | <https://embeddings.net/embeddings/frWac_no_postag_no_phrase_700_skip_cut50.bin> |
-   | Format         | Binary Word2Vec (gensim `KeyedVectors`) |
-   | Approx. size   | ~1 GB |
-   | Licence        | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) — please attribute *ATILF / CNRS & Université de Lorraine* |
+   | Property     | Value                                                                            |
+   |--------------|----------------------------------------------------------------------------------|
+   | Filename     | `frWac_no_postag_no_phrase_700_skip_cut50.bin`                                   |
+   | Source       | <https://embeddings.net/embeddings/frWac_no_postag_no_phrase_700_skip_cut50.bin> |
+   | Format       | Binary Word2Vec (gensim `KeyedVectors`)                                          |
+   | Approx. size | ~1 GB                                                                            |
+   | Licence      | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) — please attribute *ATILF / CNRS & Université de Lorraine* |
 
    To use a different model, set the `MODEL_PATH` environment variable before
    starting the bot:
@@ -185,10 +185,32 @@ All commands are prefixed with the configured `COMMAND_PREFIX` (default: `!sx`).
 
 ## Testing
 
+The test suite is split into two layers:
+
+| Layer | Location | What it covers |
+|-------|----------|----------------|
+| Unit | `tests/unit/` | Individual classes and functions in isolation |
+| Functional | `tests/functional/` | End-to-end scenarios: bot commands → game state → WebSocket payload received by an overlay client |
+
+Shared fixtures and helpers live in `tests/conftest.py` (no Word2Vec model or Twitch
+connection required — all external dependencies are replaced by lightweight fakes).
+
 Run the full test suite:
 
 ```bash
 poetry run pytest
+```
+
+Run only unit tests:
+
+```bash
+poetry run pytest tests/unit/
+```
+
+Run only functional tests:
+
+```bash
+poetry run pytest tests/functional/
 ```
 
 Run with coverage report:
@@ -266,10 +288,10 @@ It displays live game information: best guess, last guess, attempt count, top-10
 
 ### Environment variables
 
-| Variable          | Description                                      | Default  |
-|-------------------|--------------------------------------------------|----------|
-| `OVERLAY_ENABLED` | Set to `true` to start the overlay server        | `false`  |
-| `OVERLAY_PORT`    | TCP port for the overlay HTTP/WebSocket server   | `8080`   |
+| Variable          | Description                                    | Default |
+| ----------------- | ---------------------------------------------- | ------- |
+| `OVERLAY_ENABLED` | Set to `true` to start the overlay server      | `false` |
+| `OVERLAY_PORT`    | TCP port for the overlay HTTP/WebSocket server | `8080`  |
 
 ### Network tips
 

@@ -4,31 +4,8 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from bot.bot import StreamantixBot, _validate_prefix, _validate_cooldown, _validate_difficulty, _VALID_GUESS_RE
-from bot.cooldown import CooldownManager
 from game.state import Difficulty, GameState
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-def _make_bot(prefix: str = "!sx", cooldown: int = 5) -> StreamantixBot:
-    """Return a StreamantixBot instance without connecting to Twitch."""
-    bot = object.__new__(StreamantixBot)
-    bot._command_prefix = prefix
-    bot._cooldown = CooldownManager(cooldown)
-    bot._game_state = GameState()
-    bot._next_difficulty = Difficulty.EASY
-    return bot
-
-
-def _make_ctx(*, is_mod: bool = False, is_broadcaster: bool = False) -> MagicMock:
-    """Return a minimal mock of a twitchio Context."""
-    ctx = MagicMock()
-    ctx.send = AsyncMock()
-    ctx.author.is_mod = is_mod
-    ctx.author.is_broadcaster = is_broadcaster
-    return ctx
+from tests.conftest import make_bot, make_ctx
 
 
 # Underlying async function behind the @commands.command() decorator
@@ -72,12 +49,12 @@ class TestPrefixValidation:
 class TestCommandParsing:
     def test_default_prefix_stored_on_bot(self):
         """Bot stores the prefix passed at construction time."""
-        bot = _make_bot("!sx")
+        bot = make_bot("!sx")
         assert bot._command_prefix == "!sx"
 
     def test_custom_prefix_stored_on_bot(self):
         """Bot stores a custom prefix passed at construction time."""
-        bot = _make_bot("?")
+        bot = make_bot("?")
         assert bot._command_prefix == "?"
 
     def test_guess_command_ignores_extra_args(self):
@@ -95,22 +72,22 @@ class TestCommandParsing:
 
 class TestPermissionChecks:
     async def test_moderator_can_change_prefix(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot("!sx")
+        ctx = make_ctx(is_mod=True)
         await _setprefix_fn(bot, ctx, "?")
         assert bot._command_prefix == "?"
         ctx.send.assert_called_once()
 
     async def test_broadcaster_can_change_prefix(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot("!sx")
+        ctx = make_ctx(is_broadcaster=True)
         await _setprefix_fn(bot, ctx, "?")
         assert bot._command_prefix == "?"
         ctx.send.assert_called_once()
 
     async def test_regular_user_cannot_change_prefix(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx()  # neither mod nor broadcaster
+        bot = make_bot("!sx")
+        ctx = make_ctx()  # neither mod nor broadcaster
         await _setprefix_fn(bot, ctx, "?")
         assert bot._command_prefix == "!sx"  # unchanged
         ctx.send.assert_called_once()
@@ -127,33 +104,33 @@ class TestPermissionChecks:
 
 class TestSetprefixValidation:
     async def test_empty_prefix_rejected(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot("!sx")
+        ctx = make_ctx(is_mod=True)
         await _setprefix_fn(bot, ctx, "")
         assert bot._command_prefix == "!sx"
 
     async def test_no_prefix_argument_rejected(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot("!sx")
+        ctx = make_ctx(is_mod=True)
         # default value for new_prefix is ""
         await _setprefix_fn(bot, ctx)
         assert bot._command_prefix == "!sx"
 
     async def test_prefix_with_spaces_rejected(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot("!sx")
+        ctx = make_ctx(is_mod=True)
         await _setprefix_fn(bot, ctx, "! sx")
         assert bot._command_prefix == "!sx"
 
     async def test_too_long_prefix_rejected(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot("!sx")
+        ctx = make_ctx(is_mod=True)
         await _setprefix_fn(bot, ctx, "a" * 11)
         assert bot._command_prefix == "!sx"
 
     async def test_invalid_prefix_sends_error_message(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot("!sx")
+        ctx = make_ctx(is_mod=True)
         await _setprefix_fn(bot, ctx, "bad prefix")
         ctx.send.assert_called_once()
         assert "invalid" in ctx.send.call_args[0][0].lower()
@@ -167,18 +144,18 @@ class TestCooldownEnforcement:
     """Prefix changes take effect immediately for all subsequent commands."""
 
     async def test_prefix_change_persists_in_session(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot("!sx")
+        ctx = make_ctx(is_mod=True)
         await _setprefix_fn(bot, ctx, "?")
         assert bot._command_prefix == "?"
         # A second change uses the updated prefix as "old"
-        ctx2 = _make_ctx(is_mod=True)
+        ctx2 = make_ctx(is_mod=True)
         await _setprefix_fn(bot, ctx2, "!new")
         assert bot._command_prefix == "!new"
 
     async def test_prefix_change_confirmation_message_contains_both_prefixes(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot("!sx")
+        ctx = make_ctx(is_mod=True)
         await _setprefix_fn(bot, ctx, "?")
         message = ctx.send.call_args[0][0]
         assert "!sx" in message
@@ -218,22 +195,22 @@ _setcooldown_fn = StreamantixBot.setcooldown._callback
 
 class TestSetcooldownPermissions:
     async def test_moderator_can_set_cooldown(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setcooldown_fn(bot, ctx, "10")
         assert bot._cooldown.duration == 10
         ctx.send.assert_called_once()
 
     async def test_broadcaster_can_set_cooldown(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         await _setcooldown_fn(bot, ctx, "10")
         assert bot._cooldown.duration == 10
         ctx.send.assert_called_once()
 
     async def test_regular_user_cannot_set_cooldown(self):
-        bot = _make_bot()
-        ctx = _make_ctx()
+        bot = make_bot()
+        ctx = make_ctx()
         await _setcooldown_fn(bot, ctx, "10")
         assert bot._cooldown.duration == 5  # unchanged
         ctx.send.assert_called_once()
@@ -242,34 +219,34 @@ class TestSetcooldownPermissions:
 
 class TestSetcooldownValidation:
     async def test_valid_cooldown_is_applied(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setcooldown_fn(bot, ctx, "20")
         assert bot._cooldown.duration == 20
 
     async def test_zero_cooldown_is_accepted(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setcooldown_fn(bot, ctx, "0")
         assert bot._cooldown.duration == 0
 
     async def test_invalid_cooldown_sends_error(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setcooldown_fn(bot, ctx, "bad")
         assert bot._cooldown.duration == 5  # unchanged
         ctx.send.assert_called_once()
         assert "invalid" in ctx.send.call_args[0][0].lower()
 
     async def test_negative_cooldown_rejected(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setcooldown_fn(bot, ctx, "-1")
         assert bot._cooldown.duration == 5  # unchanged
 
     async def test_confirmation_message_contains_value(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setcooldown_fn(bot, ctx, "7")
         assert "7" in ctx.send.call_args[0][0]
 
@@ -283,8 +260,8 @@ _guess_fn = StreamantixBot.guess._callback
 
 class TestGuessCooldownEnforcement:
     async def test_guess_blocked_during_cooldown(self):
-        bot = _make_bot(cooldown=30)
-        ctx = _make_ctx()
+        bot = make_bot(cooldown=30)
+        ctx = make_ctx()
         ctx.author.name = "alice"
         bot._cooldown.record("alice")  # simulate a recent guess by this user
         await _guess_fn(bot, ctx)
@@ -292,24 +269,24 @@ class TestGuessCooldownEnforcement:
         assert "wait" in message.lower()
 
     async def test_guess_allowed_when_not_on_cooldown(self):
-        bot = _make_bot(cooldown=0)
-        ctx = _make_ctx()
+        bot = make_bot(cooldown=0)
+        ctx = make_ctx()
         ctx.author.name = "alice"
         await _guess_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "wait" not in message.lower()
 
     async def test_guess_records_cooldown(self):
-        bot = _make_bot(cooldown=30)
-        ctx = _make_ctx()
+        bot = make_bot(cooldown=30)
+        ctx = make_ctx()
         ctx.author.name = "alice"
         assert not bot._cooldown.is_on_cooldown("alice")
         await _guess_fn(bot, ctx)
         assert bot._cooldown.is_on_cooldown("alice")
 
     async def test_blocked_guess_message_mentions_seconds(self):
-        bot = _make_bot(cooldown=30)
-        ctx = _make_ctx()
+        bot = make_bot(cooldown=30)
+        ctx = make_ctx()
         ctx.author.name = "alice"
         bot._cooldown.record("alice")
         await _guess_fn(bot, ctx)
@@ -318,10 +295,10 @@ class TestGuessCooldownEnforcement:
 
     async def test_different_users_have_independent_cooldowns(self):
         """One user being on cooldown must not block another user."""
-        bot = _make_bot(cooldown=30)
-        ctx_alice = _make_ctx()
+        bot = make_bot(cooldown=30)
+        ctx_alice = make_ctx()
         ctx_alice.author.name = "alice"
-        ctx_bob = _make_ctx()
+        ctx_bob = make_ctx()
         ctx_bob.author.name = "bob"
         bot._cooldown.record("alice")  # only alice is on cooldown
         assert bot._cooldown.is_on_cooldown("alice")
@@ -337,7 +314,7 @@ class TestGuessCooldownEnforcement:
 # ---------------------------------------------------------------------------
 
 
-class _FakeScorer:
+class _FixedScorer:
     """Deterministic scorer: returns 0.5 for any non-exact guess."""
 
     def score_guess(self, guess: str, target: str) -> float | None:
@@ -349,24 +326,24 @@ class _FakeScorer:
 
 class TestGuessRouting:
     async def test_guess_without_word_sends_usage_hint(self):
-        bot = _make_bot(cooldown=0)
-        ctx = _make_ctx()
+        bot = make_bot(cooldown=0)
+        ctx = make_ctx()
         await _guess_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "provide" in message.lower() or "usage" in message.lower()
 
     async def test_guess_without_active_game_sends_error(self):
-        bot = _make_bot(cooldown=0)
-        ctx = _make_ctx()
+        bot = make_bot(cooldown=0)
+        ctx = make_ctx()
         ctx.author.name = "alice"
         await _guess_fn(bot, ctx, "chat")
         message = ctx.send.call_args[0][0]
         assert "no game" in message.lower()
 
     async def test_guess_exact_match_announces_winner(self):
-        bot = _make_bot(cooldown=0)
+        bot = make_bot(cooldown=0)
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         ctx.author.name = "alice"
         await _guess_fn(bot, ctx, "chat")
         message = ctx.send.call_args[0][0]
@@ -374,10 +351,10 @@ class TestGuessRouting:
         assert "chat" in message.lower()
 
     async def test_guess_near_match_shows_similarity(self):
-        bot = _make_bot(cooldown=0)
-        bot._game_state = GameState(scorer=_FakeScorer())
+        bot = make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FixedScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         ctx.author.name = "alice"
         await _guess_fn(bot, ctx, "chien")
         message = ctx.send.call_args[0][0]
@@ -399,10 +376,10 @@ class TestGuessRouting:
                     return 1.0
                 return 0.998
 
-        bot = _make_bot(cooldown=0)
+        bot = make_bot(cooldown=0)
         bot._game_state = GameState(scorer=_NearHundredScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         ctx.author.name = "alice"
         await _guess_fn(bot, ctx, "chien")
         message = ctx.send.call_args[0][0]
@@ -421,19 +398,19 @@ class TestGuessRouting:
                     return 1.0
                 return 0.475
 
-        bot = _make_bot(cooldown=0)
+        bot = make_bot(cooldown=0)
         bot._game_state = GameState(scorer=_FloorScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         ctx.author.name = "alice"
         await _guess_fn(bot, ctx, "chien")
         message = ctx.send.call_args[0][0]
         assert "47%" in message, f"Expected 47% (floor), got: {message}"
 
     async def test_guess_unknown_word_reports_vocabulary_miss(self):
-        bot = _make_bot(cooldown=0)
+        bot = make_bot(cooldown=0)
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         ctx.author.name = "alice"
         # No scorer, so non-exact guess produces score=None
         await _guess_fn(bot, ctx, "unknownword")
@@ -441,15 +418,15 @@ class TestGuessRouting:
         assert "vocabulary" in message.lower()
 
     async def test_guess_already_cited_word_with_score_sends_distinct_message(self):
-        bot = _make_bot(cooldown=0)
-        bot._game_state = GameState(scorer=_FakeScorer())
+        bot = make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FixedScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         ctx.author.name = "alice"
         # First submission of "chien"
         await _guess_fn(bot, ctx, "chien")
         # Second submission of the same word
-        ctx2 = _make_ctx()
+        ctx2 = make_ctx()
         ctx2.author.name = "bob"
         await _guess_fn(bot, ctx2, "chien")
         message = ctx2.send.call_args[0][0]
@@ -457,13 +434,13 @@ class TestGuessRouting:
         assert "%" in message
 
     async def test_guess_already_cited_word_without_score_sends_distinct_message(self):
-        bot = _make_bot(cooldown=0)
+        bot = make_bot(cooldown=0)
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         ctx.author.name = "alice"
         # No scorer, so non-exact guess produces score=None
         await _guess_fn(bot, ctx, "unknownword")
-        ctx2 = _make_ctx()
+        ctx2 = make_ctx()
         ctx2.author.name = "bob"
         await _guess_fn(bot, ctx2, "unknownword")
         message = ctx2.send.call_args[0][0]
@@ -471,15 +448,15 @@ class TestGuessRouting:
 
     async def test_guess_exact_match_not_reported_as_already_cited(self):
         """Re-guessing the winning word after game is won should show an already-found message."""
-        bot = _make_bot(cooldown=0)
-        bot._game_state = GameState(scorer=_FakeScorer())
+        bot = make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FixedScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         ctx.author.name = "alice"
         # Someone submits the winning word first (game won)
         await _guess_fn(bot, ctx, "chat")
         # Another user submits the same winning word again
-        ctx2 = _make_ctx()
+        ctx2 = make_ctx()
         ctx2.author.name = "bob"
         await _guess_fn(bot, ctx2, "chat")
         message = ctx2.send.call_args[0][0]
@@ -498,11 +475,11 @@ class TestGuessRouting:
 class TestEventError:
     async def test_event_error_does_not_raise(self):
         """event_error should swallow exceptions without crashing."""
-        bot = _make_bot()
+        bot = make_bot()
         await bot.event_error(RuntimeError("connection lost"))
 
     async def test_event_error_with_data_does_not_raise(self):
-        bot = _make_bot()
+        bot = make_bot()
         await bot.event_error(RuntimeError("reconnecting"), data="some data")
 
 
@@ -515,14 +492,14 @@ _help_fn = StreamantixBot.help._callback
 
 class TestHelpCommand:
     async def test_help_sends_message(self):
-        bot = _make_bot()
-        ctx = _make_ctx()
+        bot = make_bot()
+        ctx = make_ctx()
         await _help_fn(bot, ctx)
         ctx.send.assert_called_once()
 
     async def test_help_message_mentions_commands(self):
-        bot = _make_bot()
-        ctx = _make_ctx()
+        bot = make_bot()
+        ctx = make_ctx()
         await _help_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         for keyword in ("help", "start", "guess", "setprefix", "setcooldown", "hint", "status", "setdifficulty"):
@@ -593,26 +570,26 @@ class TestGuessWordValidationCommand:
     """Integration tests: invalid chars should be rejected before submit_guess."""
 
     async def test_digit_in_word_rejected(self):
-        bot = _make_bot(cooldown=0)
+        bot = make_bot(cooldown=0)
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         ctx.author.name = "alice"
         await _guess_fn(bot, ctx, "mot1")
         message = ctx.send.call_args[0][0]
         assert "letter" in message.lower()
 
     async def test_special_char_in_word_rejected(self):
-        bot = _make_bot(cooldown=0)
+        bot = make_bot(cooldown=0)
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         ctx.author.name = "alice"
         await _guess_fn(bot, ctx, "chat!")
         message = ctx.send.call_args[0][0]
         assert "letter" in message.lower()
 
     async def test_compound_word_accepted(self):
-        bot = _make_bot(cooldown=0)
-        ctx = _make_ctx()
+        bot = make_bot(cooldown=0)
+        ctx = make_ctx()
         ctx.author.name = "alice"
         # No active game — validation passes and reaches "no game" error
         await _guess_fn(bot, ctx, "arc-en-ciel")
@@ -620,8 +597,8 @@ class TestGuessWordValidationCommand:
         assert "letter" not in message.lower()
 
     async def test_accented_word_accepted(self):
-        bot = _make_bot(cooldown=0)
-        ctx = _make_ctx()
+        bot = make_bot(cooldown=0)
+        ctx = make_ctx()
         ctx.author.name = "alice"
         await _guess_fn(bot, ctx, "étoile")
         message = ctx.send.call_args[0][0]
@@ -629,8 +606,8 @@ class TestGuessWordValidationCommand:
 
     async def test_help_available_to_any_user(self):
         """Any user (no mod/broadcaster role) can call help."""
-        bot = _make_bot()
-        ctx = _make_ctx()  # no special role
+        bot = make_bot()
+        ctx = make_ctx()  # no special role
         await _help_fn(bot, ctx)
         ctx.send.assert_called_once()
 
@@ -644,24 +621,24 @@ _start_fn = StreamantixBot.start_game._callback
 
 class TestStartPermissions:
     async def test_non_broadcaster_cannot_start(self):
-        bot = _make_bot()
-        ctx = _make_ctx()  # no special role
+        bot = make_bot()
+        ctx = make_ctx()  # no special role
         await _start_fn(bot, ctx)
         ctx.send.assert_called_once()
         assert "broadcaster" in ctx.send.call_args[0][0].lower()
         assert bot._game_state.target_word is None
 
     async def test_moderator_cannot_start(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _start_fn(bot, ctx)
         ctx.send.assert_called_once()
         assert "broadcaster" in ctx.send.call_args[0][0].lower()
         assert bot._game_state.target_word is None
 
     async def test_broadcaster_can_start(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="chat"):
             await _start_fn(bot, ctx)
         ctx.send.assert_called_once()
@@ -670,44 +647,44 @@ class TestStartPermissions:
 
 class TestStartDifficulty:
     async def test_no_difficulty_defaults_to_easy(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="chat"):
             await _start_fn(bot, ctx)
         assert bot._game_state.difficulty == Difficulty.EASY
 
     async def test_easy_difficulty_accepted(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="chat"):
             await _start_fn(bot, ctx, "easy")
         assert bot._game_state.difficulty == Difficulty.EASY
 
     async def test_hard_difficulty_accepted(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="ambiguïté"):
             await _start_fn(bot, ctx, "hard")
         assert bot._game_state.difficulty == Difficulty.HARD
 
     async def test_medium_difficulty_accepted(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="ambiguïté"):
             await _start_fn(bot, ctx, "medium")
         assert bot._game_state.difficulty == Difficulty.MEDIUM
 
     async def test_invalid_difficulty_sends_error(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         await _start_fn(bot, ctx, "impossible")
         ctx.send.assert_called_once()
         assert "invalid" in ctx.send.call_args[0][0].lower()
         assert bot._game_state.target_word is None
 
     async def test_difficulty_is_case_insensitive(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="chat"):
             await _start_fn(bot, ctx, "EASY")
         assert bot._game_state.difficulty == Difficulty.EASY
@@ -715,33 +692,33 @@ class TestStartDifficulty:
 
 class TestStartGameState:
     async def test_start_sets_target_word(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="bateau"):
             await _start_fn(bot, ctx)
         assert bot._game_state.target_word == "bateau"
 
     async def test_start_resets_previous_game(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("old_word", Difficulty.EASY)
         bot._game_state.submit_guess("alice", "arbre")
-        ctx = _make_ctx(is_broadcaster=True)
+        ctx = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="chat"):
             await _start_fn(bot, ctx)
         assert bot._game_state.target_word == "chat"
         assert bot._game_state.attempt_count == 0
 
     async def test_start_confirmation_message_contains_difficulty(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="chat"):
             await _start_fn(bot, ctx, "easy")
         message = ctx.send.call_args[0][0]
         assert "easy" in message.lower()
 
     async def test_start_confirmation_message_contains_prefix(self):
-        bot = _make_bot("!sx")
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot("!sx")
+        ctx = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="chat"):
             await _start_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
@@ -757,46 +734,46 @@ _hint_fn = StreamantixBot.hint._callback
 
 class TestHintCommand:
     async def test_hint_no_game_sends_error(self):
-        bot = _make_bot()
-        ctx = _make_ctx()
+        bot = make_bot()
+        ctx = make_ctx()
         await _hint_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "no game" in message.lower()
 
     async def test_hint_no_guesses_sends_message(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         await _hint_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "no scored" in message.lower()
 
     async def test_hint_with_guesses_shows_leaderboard(self):
-        bot = _make_bot(cooldown=0)
-        bot._game_state = GameState(scorer=_FakeScorer())
+        bot = make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FixedScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         bot._game_state.submit_guess("alice", "chien")
         bot._game_state.submit_guess("bob", "maison")
-        ctx = _make_ctx()
+        ctx = make_ctx()
         await _hint_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "1." in message
         assert "%" in message
 
     async def test_hint_available_to_any_user(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()  # no special role
+        ctx = make_ctx()  # no special role
         await _hint_fn(bot, ctx)
         ctx.send.assert_called_once()
 
     async def test_hint_shows_at_most_ten_entries(self):
-        bot = _make_bot(cooldown=0)
-        bot._game_state = GameState(scorer=_FakeScorer())
+        bot = make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FixedScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         for i in range(15):
             bot._game_state.submit_guess("alice", f"mot{i}")
-        ctx = _make_ctx()
+        ctx = make_ctx()
         await _hint_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         # At most 10 entries means rank 11 should not appear
@@ -812,44 +789,44 @@ _status_fn = StreamantixBot.status._callback
 
 class TestStatusCommand:
     async def test_status_no_game_sends_error(self):
-        bot = _make_bot()
-        ctx = _make_ctx()
+        bot = make_bot()
+        ctx = make_ctx()
         await _status_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "no game" in message.lower()
 
     async def test_status_game_in_progress_no_guesses(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("chat", Difficulty.EASY)
-        ctx = _make_ctx()
+        ctx = make_ctx()
         await _status_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "in progress" in message.lower()
         assert "0" in message
 
     async def test_status_game_in_progress_with_scored_guess(self):
-        bot = _make_bot(cooldown=0)
-        bot._game_state = GameState(scorer=_FakeScorer())
+        bot = make_bot(cooldown=0)
+        bot._game_state = GameState(scorer=_FixedScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         bot._game_state.submit_guess("alice", "chien")
-        ctx = _make_ctx()
+        ctx = make_ctx()
         await _status_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "in progress" in message.lower()
         assert "%" in message
 
     async def test_status_game_found_shows_winner(self):
-        bot = _make_bot(cooldown=0)
+        bot = make_bot(cooldown=0)
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         bot._game_state.submit_guess("alice", "chat")
-        ctx = _make_ctx()
+        ctx = make_ctx()
         await _status_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "alice" in message.lower()
 
     async def test_status_available_to_any_user(self):
-        bot = _make_bot()
-        ctx = _make_ctx()  # no special role
+        bot = make_bot()
+        ctx = make_ctx()  # no special role
         await _status_fn(bot, ctx)
         ctx.send.assert_called_once()
 
@@ -888,22 +865,22 @@ _setdifficulty_fn = StreamantixBot.setdifficulty._callback
 
 class TestSetdifficultyPermissions:
     async def test_moderator_can_set_difficulty(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx, "hard")
         assert bot._next_difficulty == Difficulty.HARD
         ctx.send.assert_called_once()
 
     async def test_broadcaster_can_set_difficulty(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         await _setdifficulty_fn(bot, ctx, "hard")
         assert bot._next_difficulty == Difficulty.HARD
         ctx.send.assert_called_once()
 
     async def test_regular_user_cannot_set_difficulty(self):
-        bot = _make_bot()
-        ctx = _make_ctx()  # no special role
+        bot = make_bot()
+        ctx = make_ctx()  # no special role
         await _setdifficulty_fn(bot, ctx, "hard")
         assert bot._next_difficulty == Difficulty.EASY  # unchanged
         ctx.send.assert_called_once()
@@ -912,43 +889,43 @@ class TestSetdifficultyPermissions:
 
 class TestSetdifficultyValidation:
     async def test_invalid_difficulty_rejected(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx, "medium")
         assert bot._next_difficulty == Difficulty.EASY  # unchanged
         ctx.send.assert_called_once()
         assert "invalid" in ctx.send.call_args[0][0].lower()
 
     async def test_empty_difficulty_rejected(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx, "")
         assert bot._next_difficulty == Difficulty.EASY  # unchanged
 
     async def test_valid_easy_accepted(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx, "easy")
         assert bot._next_difficulty == Difficulty.EASY
         ctx.send.assert_called_once()
 
     async def test_valid_hard_accepted(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx, "hard")
         assert bot._next_difficulty == Difficulty.HARD
         ctx.send.assert_called_once()
 
     async def test_confirmation_message_contains_difficulty(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx, "hard")
         message = ctx.send.call_args[0][0]
         assert "hard" in message.lower()
 
     async def test_case_insensitive(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx = make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx, "HARD")
         assert bot._next_difficulty == Difficulty.HARD
 
@@ -960,20 +937,20 @@ class TestSetdifficultyValidation:
 
 class TestSetdifficultyIntegration:
     async def test_start_uses_next_difficulty_as_default(self):
-        bot = _make_bot()
-        ctx_mod = _make_ctx(is_mod=True)
+        bot = make_bot()
+        ctx_mod = make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx_mod, "hard")
         assert bot._next_difficulty == Difficulty.HARD
-        ctx_broadcaster = _make_ctx(is_broadcaster=True)
+        ctx_broadcaster = make_ctx(is_broadcaster=True)
         with patch("random.choice", return_value="ambiguïté"):
             await _start_fn(bot, ctx_broadcaster)
         assert bot._game_state.difficulty == Difficulty.HARD
 
     async def test_setdifficulty_does_not_reset_current_game(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         bot._game_state.submit_guess("alice", "arbre")
-        ctx = _make_ctx(is_mod=True)
+        ctx = make_ctx(is_mod=True)
         await _setdifficulty_fn(bot, ctx, "hard")
         # Current game is unaffected
         assert bot._game_state.target_word == "chat"
@@ -989,27 +966,27 @@ _solution_fn = StreamantixBot.solution._callback
 
 class TestSolutionPermissions:
     async def test_non_broadcaster_cannot_reveal(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("secret", Difficulty.EASY)
-        ctx = _make_ctx()  # no special role
+        ctx = make_ctx()  # no special role
         await _solution_fn(bot, ctx)
         ctx.send.assert_called_once()
         assert "broadcaster" in ctx.send.call_args[0][0].lower()
         assert not bot._game_state.is_found
 
     async def test_moderator_cannot_reveal(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("secret", Difficulty.EASY)
-        ctx = _make_ctx(is_mod=True)
+        ctx = make_ctx(is_mod=True)
         await _solution_fn(bot, ctx)
         ctx.send.assert_called_once()
         assert "broadcaster" in ctx.send.call_args[0][0].lower()
         assert not bot._game_state.is_found
 
     async def test_broadcaster_can_reveal(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("secret", Difficulty.EASY)
-        ctx = _make_ctx(is_broadcaster=True)
+        ctx = make_ctx(is_broadcaster=True)
         ctx.author.name = "streamer123"
         await _solution_fn(bot, ctx)
         assert bot._game_state.is_found
@@ -1017,33 +994,33 @@ class TestSolutionPermissions:
 
 class TestSolutionGameState:
     async def test_reveal_requires_active_game(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         await _solution_fn(bot, ctx)
         ctx.send.assert_called_once()
         assert "no game" in ctx.send.call_args[0][0].lower()
 
     async def test_reveal_marks_game_as_found(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("mystère", Difficulty.EASY)
         assert not bot._game_state.is_found
-        ctx = _make_ctx(is_broadcaster=True)
+        ctx = make_ctx(is_broadcaster=True)
         ctx.author.name = "broadcaster"
         await _solution_fn(bot, ctx)
         assert bot._game_state.is_found
 
     async def test_reveal_sets_found_by_to_broadcaster(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("énigme", Difficulty.EASY)
-        ctx = _make_ctx(is_broadcaster=True)
+        ctx = make_ctx(is_broadcaster=True)
         ctx.author.name = "streamer_pro"
         await _solution_fn(bot, ctx)
         assert bot._game_state.found_by == "streamer_pro"
 
     async def test_reveal_message_contains_target_word(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("papillon", Difficulty.EASY)
-        ctx = _make_ctx(is_broadcaster=True)
+        ctx = make_ctx(is_broadcaster=True)
         ctx.author.name = "streamer"
         await _solution_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
@@ -1051,10 +1028,10 @@ class TestSolutionGameState:
         assert "revealed" in message.lower() or "solution" in message.lower()
 
     async def test_reveal_adds_to_history(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state.start_new_game("cascade", Difficulty.EASY)
         bot._game_state.submit_guess("alice", "rivière")
-        ctx = _make_ctx(is_broadcaster=True)
+        ctx = make_ctx(is_broadcaster=True)
         ctx.author.name = "broadcaster"
         await _solution_fn(bot, ctx)
         assert bot._game_state.attempt_count == 2
@@ -1064,10 +1041,10 @@ class TestSolutionGameState:
 class TestSolutionOverlayNotification:
     async def test_reveal_notifies_overlay(self):
         mock_callback = AsyncMock()
-        bot = _make_bot()
+        bot = make_bot()
         bot._on_state_change = mock_callback
         bot._game_state.start_new_game("solution", Difficulty.EASY)
-        ctx = _make_ctx(is_broadcaster=True)
+        ctx = make_ctx(is_broadcaster=True)
         ctx.author.name = "broadcaster"
         await _solution_fn(bot, ctx)
         mock_callback.assert_called_once()
