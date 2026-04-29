@@ -28,21 +28,21 @@ Players guess a secret word by submitting words in chat. The bot uses word embed
    cp .env.example .env
    ```
 
-   | Variable               | Description                                                   | Default |
-   |------------------------|---------------------------------------------------------------|---------|
-   | `TWITCH_TOKEN`         | Manual OAuth token (`oauth:…`) — optional if using OAuth flow | —       |
-   | `TWITCH_CHANNEL`       | Twitch channel name to join — **required**                    | —       |
-   | `TWITCH_CLIENT_ID`     | Twitch app client ID (OAuth flow)                             | —       |
-   | `TWITCH_CLIENT_SECRET` | Twitch app client secret (OAuth flow)                         | —       |
-   | `TWITCH_REDIRECT_URI`  | OAuth redirect URI                                            | `http://localhost:4343/callback` |
-   | `TWITCH_SCOPES`        | Space-separated OAuth scopes                                  | `chat:read chat:edit` |
-   | `TWITCH_TOKEN_PATH`    | Path to the JSON token storage file                           | `.secrets/twitch_tokens.json` |
-   | `COMMAND_PREFIX`       | Prefix for bot commands                                       | `!sx`   |
-   | `COOLDOWN`             | Cooldown between guesses (seconds)                            | `5`     |
-   | `DIFFICULTY`           | Game difficulty (`easy`=facile, `hard`=difficile)             | `easy`  |
-   | `MODEL_PATH`           | Path to the Word2Vec binary model file                        | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
-   | `OVERLAY_ENABLED`      | Start the web overlay server                                  | `false` |
-   | `OVERLAY_PORT`         | TCP port for the overlay server                               | `8080`  |
+   | Variable | Description | Default |
+   | -------- | ----------- | ------- |
+   | `TWITCH_TOKEN` | Manual OAuth token (`oauth:…`) — optional if using OAuth flow | — |
+   | `TWITCH_CHANNEL` | Twitch channel name to join — **required** | — |
+   | `TWITCH_CLIENT_ID` | Twitch app client ID (OAuth flow) | — |
+   | `TWITCH_CLIENT_SECRET` | Twitch app client secret (OAuth flow) | — |
+   | `TWITCH_REDIRECT_URI` | OAuth redirect URI | `http://localhost:4343/callback` |
+   | `TWITCH_SCOPES` | Space-separated OAuth scopes | `chat:read chat:edit` |
+   | `TWITCH_TOKEN_PATH` | Path to the JSON token storage file | `.secrets/twitch_tokens.json` |
+   | `COMMAND_PREFIX` | Prefix for bot commands | `!sx` |
+   | `COOLDOWN` | Cooldown between guesses (seconds) | `5` |
+   | `DIFFICULTY` | Game difficulty (`easy`=facile, `hard`=difficile) | `easy` |
+   | `MODEL_PATH` | Path to the Word2Vec binary model file | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+   | `OVERLAY_ENABLED` | Start the web overlay server | `false` |
+   | `OVERLAY_PORT` | TCP port for the overlay server | `8080` |
 
 ## Twitch Authentication
 
@@ -114,7 +114,7 @@ On each start the bot:
 
 The `.secrets/` directory is gitignored to prevent accidentally committing tokens.
 
-3. **Download the word embedding model**
+1. **Download the word embedding model**
 
    ```bash
    poetry run python download_model.py
@@ -125,13 +125,13 @@ The `.secrets/` directory is gitignored to prevent accidentally committing token
 
    ### Model details
 
-   | Property     | Value                                                                            |
-   |--------------|----------------------------------------------------------------------------------|
-   | Filename     | `frWac_no_postag_no_phrase_700_skip_cut50.bin`                                   |
-   | Source       | <https://embeddings.net/embeddings/frWac_no_postag_no_phrase_700_skip_cut50.bin> |
-   | Format       | Binary Word2Vec (gensim `KeyedVectors`)                                          |
-   | Approx. size | ~1 GB                                                                            |
-   | Licence      | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) — please attribute *ATILF / CNRS & Université de Lorraine* |
+   | Property | Value |
+   | -------- | ----- |
+   | Filename | `frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+   | Source | <https://embeddings.net/embeddings/frWac_no_postag_no_phrase_700_skip_cut50.bin> |
+   | Format | Binary Word2Vec (gensim `KeyedVectors`) |
+   | Approx. size | ~1 GB |
+   | Licence | [CC BY 3.0](https://creativecommons.org/licenses/by/3.0/) — please attribute *ATILF / CNRS & Université de Lorraine* |
 
    To use a different model, set the `MODEL_PATH` environment variable before
    starting the bot:
@@ -159,7 +159,7 @@ one word per line and ensure every word is present in your word2vec model vocabu
 All commands are prefixed with the configured `COMMAND_PREFIX` (default: `!sx`).
 
 | Command | Who can use | Description |
-|---------|-------------|-------------|
+| ------- | ----------- | ----------- |
 | `!sx help` | Anyone | Show available commands |
 | `!sx start [easy\|medium\|hard]` | Broadcaster only | Start a new game round. Defaults to the difficulty set with `setdifficulty` (initially `easy`) |
 | `!sx guess <word>` | Anyone | Submit a guess for the current game |
@@ -188,7 +188,7 @@ All commands are prefixed with the configured `COMMAND_PREFIX` (default: `!sx`).
 The test suite is split into two layers:
 
 | Layer | Location | What it covers |
-|-------|----------|----------------|
+| ----- | -------- | -------------- |
 | Unit | `tests/unit/` | Individual classes and functions in isolation |
 | Functional | `tests/functional/` | End-to-end scenarios: bot commands → game state → WebSocket payload received by an overlay client |
 
@@ -406,32 +406,32 @@ docker run --rm \
 With Docker Compose the `./models` and `./.secrets` bind-mounts in `compose.yaml`
 serve the same purpose for local development.
 
-### Environment variables
+### Docker environment variables
 
 All variables are documented in `.env.example`. The table below summarises the
 most important ones:
 
-| Variable               | Description                                               | Default |
-|------------------------|-----------------------------------------------------------|---------|
-| `TWITCH_TOKEN`         | Manual OAuth token (`oauth:…`) — optional if using OAuth flow | —   |
-| `TWITCH_CHANNEL`       | Twitch channel name to join — **required**                | —       |
-| `TWITCH_CLIENT_ID`     | Twitch app client ID (OAuth flow)                         | —       |
-| `TWITCH_CLIENT_SECRET` | Twitch app client secret (OAuth flow)                     | —       |
-| `TWITCH_REDIRECT_URI`  | OAuth redirect URI — set to `http://localhost:4343/callback` for local Docker | `http://localhost:4343/callback` |
-| `TWITCH_SCOPES`        | Space-separated OAuth scopes                                              | `chat:read chat:edit` |
-| `TWITCH_TOKEN_PATH`    | Path to the JSON token storage file inside the container                  | `.secrets/twitch_tokens.json` |
-| `COMMAND_PREFIX`       | Prefix for bot commands                                                   | `!sx`   |
-| `COOLDOWN`             | Cooldown between guesses (seconds)                                        | `5`     |
-| `DIFFICULTY`           | Game difficulty (`easy` / `hard`)                                         | `easy`  |
-| `MODEL_PATH`           | Path to the Word2Vec binary model inside the container                    | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
-| `OVERLAY_ENABLED`      | Set to `true` to start the web overlay server                             | `false` |
-| `OVERLAY_PORT`         | TCP port for the overlay HTTP/WebSocket server                            | `8080`  |
-| `OAUTH_CALLBACK_PORT`  | Host-side port mapped to the container's OAuth callback server (port 4343) | `4343` |
+| Variable | Description | Default |
+| -------- | ----------- | ------- |
+| `TWITCH_TOKEN` | Manual OAuth token (`oauth:…`) — optional if using OAuth flow | — |
+| `TWITCH_CHANNEL` | Twitch channel name to join — **required** | — |
+| `TWITCH_CLIENT_ID` | Twitch app client ID (OAuth flow) | — |
+| `TWITCH_CLIENT_SECRET` | Twitch app client secret (OAuth flow) | — |
+| `TWITCH_REDIRECT_URI` | OAuth redirect URI — set to `http://localhost:4343/callback` for local Docker | `http://localhost:4343/callback` |
+| `TWITCH_SCOPES` | Space-separated OAuth scopes | `chat:read chat:edit` |
+| `TWITCH_TOKEN_PATH` | Path to the JSON token storage file inside the container | `.secrets/twitch_tokens.json` |
+| `COMMAND_PREFIX` | Prefix for bot commands | `!sx` |
+| `COOLDOWN` | Cooldown between guesses (seconds) | `5` |
+| `DIFFICULTY` | Game difficulty (`easy` / `hard`) | `easy` |
+| `MODEL_PATH` | Path to the Word2Vec binary model inside the container | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
+| `OVERLAY_ENABLED` | Set to `true` to start the web overlay server | `false` |
+| `OVERLAY_PORT` | TCP port for the overlay HTTP/WebSocket server | `8080` |
+| `OAUTH_CALLBACK_PORT` | Host-side port mapped to the container's OAuth callback server (port 4343) | `4343` |
 
 ### Troubleshooting
 
 | Symptom | Likely cause | Fix |
-|---------|-------------|-----|
+| ------- | ------------ | --- |
 | Container exits immediately with *"Required environment variable … is not set"* | `.env` file not passed or incomplete | Add `--env-file .env` to `docker run`, or verify all required variables in `compose.yaml` |
 | Model download fails / times out | No internet access from the container | Ensure outbound HTTPS is allowed, or pre-download the model and place it in the mounted `models/` directory |
 | Overlay not reachable from OBS | Port not published | Add `-p 8080:8080` to `docker run` or check the port mapping in `compose.yaml`; check firewall rules |
