@@ -749,9 +749,9 @@ class _OovAwareScorer:
 @pytest.mark.asyncio
 class TestStartOovFiltering:
     async def test_all_words_oov_sends_error_and_aborts(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state = GameState(scorer=_OovAwareScorer(set()))
-        ctx = _make_ctx(is_broadcaster=True)
+        ctx = make_ctx(is_broadcaster=True)
         with patch("bot.bot.load_word_list", return_value=["chat", "licorne", "dragon"]):
             await _start_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
@@ -759,16 +759,16 @@ class TestStartOovFiltering:
         assert bot._game_state.target_word is None
 
     async def test_partial_oov_starts_game_with_valid_word(self):
-        bot = _make_bot()
+        bot = make_bot()
         bot._game_state = GameState(scorer=_OovAwareScorer({"chat", "dragon"}))
-        ctx = _make_ctx(is_broadcaster=True)
+        ctx = make_ctx(is_broadcaster=True)
         with patch("bot.bot.load_word_list", return_value=["chat", "licorne", "dragon"]):
             await _start_fn(bot, ctx)
         assert bot._game_state.target_word in {"chat", "dragon"}
 
     async def test_no_scorer_skips_oov_filter(self):
-        bot = _make_bot()
-        ctx = _make_ctx(is_broadcaster=True)
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
         with patch("bot.bot.load_word_list", return_value=["chat", "licorne", "dragon"]):
             await _start_fn(bot, ctx)
         assert bot._game_state.target_word in {"chat", "licorne", "dragon"}
