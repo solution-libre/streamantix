@@ -1,0 +1,39 @@
+# French interest words - moyen (medium) difficulty
+# One word per line, no accents required for lookup (clean_word normalises)
+# Semi-concrete French nouns: familiar to all speakers but requiring
+# more lateral thinking than easy words. Zero overlap with EASY or HARD lists.
+# All words are high-frequency in frWac (no OOV risk).
+âge
+aile
+bruit
+branche
+désert
+fenêtre
+fête
+feu
+force
+fumée
+graine
+guerre
+île
+image
+joie
+lac
+liberté
+miroir
+mort
+mur
+musique
+nuage
+ombre
+peur
+pierre
+plage
+regard
+rêve
+roi
+sable
+silence
+vague
+voix
+voyage

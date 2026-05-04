@@ -16,7 +16,7 @@ from game.word_utils import load_word_list
 _DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
 _WORD_LIST_FILES: dict[Difficulty, pathlib.Path] = {
     Difficulty.EASY: _DATA_DIR / "interest_words_f.txt",
-    Difficulty.MEDIUM: _DATA_DIR / "interest_words_d.txt",
+    Difficulty.MEDIUM: _DATA_DIR / "interest_words_m.txt",
     Difficulty.HARD: _DATA_DIR / "interest_words_d.txt",
 }
 
@@ -30,7 +30,7 @@ _HELP_TEXT = (
     "solution — reveal the answer (broadcaster only) | "
     "setprefix <prefix> — change prefix (mod/broadcaster) | "
     "setcooldown <seconds> — change cooldown (mod/broadcaster) | "
-    "setdifficulty <easy|hard> — set difficulty for next game (mod/broadcaster)"
+    "setdifficulty <easy|medium|hard> — set difficulty for next game (mod/broadcaster)"
 )
 
 _MAX_PREFIX_LEN = 10
@@ -64,13 +64,8 @@ def _validate_cooldown(value: str) -> str | None:
 
 
 def _validate_difficulty(value: str | None) -> str | None:
-    """Return an error message string if *value* is not a valid setdifficulty value, else ``None``.
-
-    Note: ``setdifficulty`` only accepts ``easy`` and ``hard``.  ``medium`` is
-    intentionally excluded here; it remains accessible via the ``start`` command
-    for backwards compatibility.
-    """
-    valid = {Difficulty.EASY.value, Difficulty.HARD.value}
+    """Return an error message string if *value* is not a valid setdifficulty value, else ``None``."""
+    valid = {d.value for d in Difficulty}
     if not value or value.lower() not in valid:
         return f"difficulty must be one of: {', '.join(sorted(valid))}"
     return None
@@ -158,6 +153,16 @@ class StreamantixBot(commands.Bot):
         if not words:
             await ctx.send("Word list is empty. Cannot start game.")
             return
+
+        scorer = self._game_state.scorer
+        if scorer is not None:
+            words = [w for w in words if scorer.is_in_vocab(w)]
+            if not words:
+                await ctx.send(
+                    "No playable words found for this difficulty "
+                    "(all words are out of vocabulary). Check the word list."
+                )
+                return
 
         target = random.choice(words)
         self._game_state.start_new_game(target, diff)
@@ -306,7 +311,7 @@ class StreamantixBot(commands.Bot):
             return
 
         parts = [
-            f"{i + 1}. {e.raw_word} ({math.floor((e.score or 0.0) * 100)}%)"
+            f"{i + 1}. {e.raw_word} ({math.floor(e.score * 100)}%)"
             for i, e in enumerate(top)
         ]
         await ctx.send("Top guesses: " + " | ".join(parts))
@@ -333,7 +338,7 @@ class StreamantixBot(commands.Bot):
         top = self._game_state.top_guesses(1)
         if top:
             best = top[0]
-            pct = math.floor((best.score or 0.0) * 100)
+            pct = math.floor(best.score * 100)
             await ctx.send(
                 f"Game in progress. {attempts} attempt(s). "
                 f"Best guess: '{best.raw_word}' ({pct}%)."
@@ -347,7 +352,7 @@ class StreamantixBot(commands.Bot):
     async def setdifficulty(self, ctx: commands.Context, difficulty: str = "") -> None:
         """Change the difficulty for the next game (moderators and broadcaster only).
 
-        Usage: <prefix> setdifficulty <easy|hard>
+        Usage: <prefix> setdifficulty <easy|medium|hard>
 
         Does not affect the current game. The change is applied immediately but is
         not persisted; it resets when the bot restarts.
