@@ -152,6 +152,48 @@ class TestSemanticEngineSimilarity:
 
 
 # ---------------------------------------------------------------------------
+# SemanticEngine – get_hints
+# ---------------------------------------------------------------------------
+
+class TestSemanticEngineGetHints:
+    def test_returns_list(self):
+        engine = _make_engine()
+        hints = engine.get_hints("chat")
+        assert isinstance(hints, list)
+
+    def test_excludes_target_word(self):
+        engine = _make_engine()
+        hints = engine.get_hints("chat")
+        assert "chat" not in hints
+
+    def test_known_neighbour_present(self):
+        engine = _make_engine()
+        hints = engine.get_hints("chat")
+        # "chien" is the closest neighbour to "chat" in the fixture
+        assert "chien" in hints
+
+    def test_respects_n_limit(self):
+        engine = _make_engine()
+        hints = engine.get_hints("chat", n=1)
+        assert len(hints) <= 1
+
+    def test_oov_returns_empty(self):
+        engine = _make_engine()
+        hints = engine.get_hints("licorne")
+        assert hints == []
+
+    def test_raises_when_not_loaded(self):
+        engine = SemanticEngine(model_path="/nonexistent/path.bin")
+        with pytest.raises(RuntimeError, match="not loaded"):
+            engine.get_hints("chat")
+
+    def test_closest_first_ordering(self):
+        engine = _make_engine()
+        hints = engine.get_hints("chat")
+        # "chien" (closest) should come before "maison"/"voiture" (unrelated)
+        assert hints.index("chien") < hints.index("maison")
+
+# ---------------------------------------------------------------------------
 # GameEngine – initialisation
 # ---------------------------------------------------------------------------
 

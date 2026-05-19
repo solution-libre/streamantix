@@ -10,6 +10,7 @@ from tests.conftest import FakeScorer, make_bot, make_ctx
 
 _start_fn = StreamantixBot.start_game._callback
 _guess_fn = StreamantixBot.guess._callback
+_top_fn = StreamantixBot.top._callback
 _hint_fn = StreamantixBot.hint._callback
 _status_fn = StreamantixBot.status._callback
 _solution_fn = StreamantixBot.solution._callback
@@ -102,12 +103,12 @@ class TestDifficultyFlow:
 
 
 # ---------------------------------------------------------------------------
-# TestHintAndStatus
+# TestTopAndStatus
 # ---------------------------------------------------------------------------
 
 
-class TestHintAndStatus:
-    async def test_hint_shows_sorted_leaderboard(self):
+class TestTopAndStatus:
+    async def test_top_shows_sorted_leaderboard(self):
         bot = make_bot(scorer=FakeScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         # Scores: c=1/4=0.25, ch=2/4=0.5, cha=3/4=0.75 (FakeScorer length-ratio)
@@ -115,7 +116,7 @@ class TestHintAndStatus:
             bot._game_state.submit_guess(user, word)
 
         ctx = make_ctx()
-        await _hint_fn(bot, ctx)
+        await _top_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         # Verify rank markers and each word appears as a distinct entry
         # Expected format: "1. cha (75%) | 2. ch (50%) | 3. c (25%)"
@@ -142,11 +143,11 @@ class TestHintAndStatus:
         message = ctx.send.call_args[0][0]
         assert "no game" in message.lower()
 
-    async def test_hint_reports_no_guesses_when_empty(self):
+    async def test_top_reports_no_guesses_when_empty(self):
         bot = make_bot()
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         ctx = make_ctx()
-        await _hint_fn(bot, ctx)
+        await _top_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "no scored" in message.lower()
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Protocol
+from typing import Protocol, Tuple
 
 from game.word_utils import clean_word
 
@@ -16,6 +16,14 @@ class Difficulty(str, Enum):
     EASY = "easy"
     MEDIUM = "medium"
     HARD = "hard"
+
+
+class HintResult(str, Enum):
+    """Outcome of a :meth:`GameState.next_hint` call."""
+
+    OK = "ok"
+    LIMIT_REACHED = "limit_reached"
+    POOL_EXHAUSTED = "pool_exhausted"
 
 
 class Scorer(Protocol):
@@ -85,6 +93,10 @@ class GameState:
         self._difficulty: Difficulty | None = None
         self._history: list[GuessEntry] = []
         self._is_found: bool = False
+        self._hint_pool: list[str] = []
+        self._hints_revealed: list[str] = []
+        self._hints_given: int = 0
+        self._hints_per_game: int = 5
 
     @property
     def scorer(self) -> Scorer | None:
@@ -95,17 +107,30 @@ class GameState:
     # Game lifecycle
     # ------------------------------------------------------------------
 
-    def start_new_game(self, target_word: str, difficulty: Difficulty) -> None:
+    def start_new_game(
+        self,
+        target_word: str,
+        difficulty: Difficulty,
+        hint_pool: list[str] | None = None,
+        hints_per_game: int = 5,
+    ) -> None:
         """Reset state and begin a new round with *target_word*.
 
         Args:
             target_word: The secret word players must guess.
             difficulty: Difficulty level for the round.
+            hint_pool: Pre-computed list of hint words (farthest first).
+                If ``None``, hints are disabled for this round.
+            hints_per_game: Maximum number of hints allowed this round.
         """
         self._target_word = target_word
         self._difficulty = difficulty
         self._history = []
         self._is_found = False
+        self._hint_pool = list(hint_pool) if hint_pool is not None else []
+        self._hints_revealed = []
+        self._hints_given = 0
+        self._hints_per_game = hints_per_game
 
     # ------------------------------------------------------------------
     # Guessing
@@ -205,6 +230,42 @@ class GameState:
     def history(self) -> list[GuessEntry]:
         """Read-only snapshot of all guess entries in submission order."""
         return list(self._history)
+
+    # ------------------------------------------------------------------
+    # Hint system
+    # ------------------------------------------------------------------
+
+    def next_hint(self) -> Tuple[HintResult, str | None]:
+        """Return the next hint word from the pre-computed pool.
+
+        Words already guessed by players are silently skipped.  The counter
+        is only incremented when a word is successfully returned.
+
+        Returns:
+            A ``(HintResult, word)`` tuple.  *word* is ``None`` when the
+            result is not :attr:`HintResult.OK`.
+        """
+        if self._hints_given >= self._hints_per_game:
+            return HintResult.LIMIT_REACHED, None
+
+        guessed = {e.normalized_word for e in self._history}
+        for word in self._hint_pool:
+            if word not in guessed and word not in self._hints_revealed:
+                self._hints_revealed.append(word)
+                self._hints_given += 1
+                return HintResult.OK, word
+
+        return HintResult.POOL_EXHAUSTED, None
+
+    @property
+    def hints_revealed(self) -> list[str]:
+        """Ordered list of hint words revealed so far this round."""
+        return list(self._hints_revealed)
+
+    @property
+    def hints_given(self) -> int:
+        """Number of hints successfully revealed this round."""
+        return self._hints_given
 
     def top_guesses(self, n: int = 10) -> list[GuessEntry]:
         """Return the top *n* guesses by score, highest first.

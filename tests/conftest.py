@@ -46,8 +46,12 @@ def make_bot(
     bot._command_prefix = prefix
     bot._cooldown = CooldownManager(cooldown)
     bot._game_state = GameState(scorer=scorer)
+    bot._scorer = scorer
     bot._next_difficulty = Difficulty.EASY
     bot._on_state_change = on_state_change
+    bot._token = ""
+    bot._eventsub = None
+    bot._channel_id = None
     return bot
 
 

@@ -163,7 +163,8 @@ All commands are prefixed with the configured `COMMAND_PREFIX` (default: `!sx`).
 | `!sx help` | Anyone | Show available commands |
 | `!sx start [easy\|medium\|hard]` | Broadcaster only | Start a new game round. Defaults to the difficulty set with `setdifficulty` (initially `easy`) |
 | `!sx guess <word>` | Anyone | Submit a guess for the current game |
-| `!sx hint` | Anyone | Show the top 10 best guesses so far (proximity leaderboard) |
+| `!sx hint` | Broadcaster only | Manually reveal the next semantic hint from the pool (bypasses channel points) |
+| `!sx top` | Anyone | Show the top 10 best guesses so far (proximity leaderboard) |
 | `!sx status` | Anyone | Show current game status: attempts, best guess, and whether the word has been found |
 | `!sx setprefix <prefix>` | Mod / Broadcaster | Change the command prefix (session only) |
 | `!sx setcooldown <seconds>` | Mod / Broadcaster | Change the guess cooldown duration (session only) |
@@ -176,6 +177,7 @@ All commands are prefixed with the configured `COMMAND_PREFIX` (default: `!sx`).
 !sx start
 !sx start hard
 !sx guess maison
+!sx top
 !sx hint
 !sx status
 !sx setprefix ?sx

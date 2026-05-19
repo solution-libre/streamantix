@@ -502,7 +502,7 @@ class TestHelpCommand:
         ctx = make_ctx()
         await _help_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
-        for keyword in ("help", "start", "guess", "setprefix", "setcooldown", "hint", "status", "setdifficulty"):
+        for keyword in ("help", "start", "guess", "setprefix", "setcooldown", "hint", "top", "status", "setdifficulty"):
             assert keyword in message
 
 
@@ -775,58 +775,118 @@ class TestStartOovFiltering:
 
 
 # ---------------------------------------------------------------------------
-# hint command
+# top command (renamed from hint — shows leaderboard)
 # ---------------------------------------------------------------------------
 
-_hint_fn = StreamantixBot.hint._callback
+_top_fn = StreamantixBot.top._callback
 
 
-class TestHintCommand:
-    async def test_hint_no_game_sends_error(self):
+class TestTopCommand:
+    async def test_top_no_game_sends_error(self):
         bot = make_bot()
         ctx = make_ctx()
-        await _hint_fn(bot, ctx)
+        await _top_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "no game" in message.lower()
 
-    async def test_hint_no_guesses_sends_message(self):
+    async def test_top_no_guesses_sends_message(self):
         bot = make_bot()
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         ctx = make_ctx()
-        await _hint_fn(bot, ctx)
+        await _top_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "no scored" in message.lower()
 
-    async def test_hint_with_guesses_shows_leaderboard(self):
+    async def test_top_with_guesses_shows_leaderboard(self):
         bot = make_bot(cooldown=0)
         bot._game_state = GameState(scorer=_FixedScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         bot._game_state.submit_guess("alice", "chien")
         bot._game_state.submit_guess("bob", "maison")
         ctx = make_ctx()
-        await _hint_fn(bot, ctx)
+        await _top_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
         assert "1." in message
         assert "%" in message
 
-    async def test_hint_available_to_any_user(self):
+    async def test_top_available_to_any_user(self):
         bot = make_bot()
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         ctx = make_ctx()  # no special role
-        await _hint_fn(bot, ctx)
+        await _top_fn(bot, ctx)
         ctx.send.assert_called_once()
 
-    async def test_hint_shows_at_most_ten_entries(self):
+    async def test_top_shows_at_most_ten_entries(self):
         bot = make_bot(cooldown=0)
         bot._game_state = GameState(scorer=_FixedScorer())
         bot._game_state.start_new_game("chat", Difficulty.EASY)
         for i in range(15):
             bot._game_state.submit_guess("alice", f"mot{i}")
         ctx = make_ctx()
+        await _top_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "11." not in message
+
+
+# ---------------------------------------------------------------------------
+# hint command (broadcaster — reveals next semantic hint)
+# ---------------------------------------------------------------------------
+
+_hint_fn = StreamantixBot.hint._callback
+
+
+class TestHintCommand:
+    async def test_hint_non_broadcaster_rejected(self):
+        bot = make_bot()
+        bot._game_state.start_new_game("chat", Difficulty.EASY, hint_pool=["lumiere"], hints_per_game=5)
+        ctx = make_ctx(is_broadcaster=False)
         await _hint_fn(bot, ctx)
         message = ctx.send.call_args[0][0]
-        # At most 10 entries means rank 11 should not appear
-        assert "11." not in message
+        assert "broadcaster" in message.lower()
+
+    async def test_hint_no_game_sends_error(self):
+        bot = make_bot()
+        ctx = make_ctx(is_broadcaster=True)
+        await _hint_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "no game" in message.lower()
+
+    async def test_hint_broadcaster_reveals_word(self):
+        bot = make_bot()
+        bot._game_state.start_new_game("chat", Difficulty.EASY, hint_pool=["lumiere"], hints_per_game=5)
+        ctx = make_ctx(is_broadcaster=True)
+        await _hint_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "lumiere" in message
+
+    async def test_hint_broadcaster_shows_counter(self):
+        bot = make_bot()
+        bot._game_state.start_new_game("chat", Difficulty.EASY, hint_pool=["a", "b"], hints_per_game=5)
+        ctx = make_ctx(is_broadcaster=True)
+        await _hint_fn(bot, ctx)
+        message = ctx.send.call_args[0][0]
+        assert "1/5" in message
+
+    async def test_hint_broadcaster_limit_reached(self):
+        bot = make_bot()
+        bot._game_state.start_new_game("chat", Difficulty.EASY, hint_pool=["a"], hints_per_game=1)
+        ctx = make_ctx(is_broadcaster=True)
+        await _hint_fn(bot, ctx)   # uses the 1 allowed hint
+        ctx2 = make_ctx(is_broadcaster=True)
+        await _hint_fn(bot, ctx2)  # limit reached
+        message = ctx2.send.call_args[0][0]
+        assert "limit" in message.lower() or "reached" in message.lower()
+
+    async def test_hint_broadcaster_pool_exhausted(self):
+        bot = make_bot()
+        bot._game_state.start_new_game("chat", Difficulty.EASY, hint_pool=["a"], hints_per_game=5)
+        ctx = make_bot()
+        ctx1 = make_ctx(is_broadcaster=True)
+        await _hint_fn(bot, ctx1)  # reveals "a"
+        ctx2 = make_ctx(is_broadcaster=True)
+        await _hint_fn(bot, ctx2)  # pool exhausted
+        message = ctx2.send.call_args[0][0]
+        assert "no more" in message.lower() or "pool" in message.lower()
 
 
 # ---------------------------------------------------------------------------
