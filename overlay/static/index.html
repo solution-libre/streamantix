@@ -145,6 +145,28 @@
 
     /* Commands */
     #commands { font-size: 10px; color: #777; border-top: 1px solid #333; padding-top: 6px; }
+
+    /* Hints panel */
+    #hints-section { display: none; flex-direction: column; gap: 3px; }
+    #hints-label {
+      font-size: 10px;
+      color: #7b61ff;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    #hints-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px;
+    }
+    .hint-chip {
+      font-size: 11px;
+      background: rgba(123, 97, 255, 0.18);
+      border: 1px solid rgba(123, 97, 255, 0.4);
+      color: #c4b5fd;
+      border-radius: 4px;
+      padding: 2px 7px;
+    }
   </style>
 </head>
 <body>
@@ -172,11 +194,16 @@
       <div id="top-list"></div>
     </div>
 
+    <div id="hints-section">
+      <span id="hints-label">Hints</span>
+      <div id="hints-list"></div>
+    </div>
+
     <div id="footer">
       <span id="attempt-count">0 guesses</span>
     </div>
 
-    <div id="commands">!sx guess &lt;word&gt; &nbsp;·&nbsp; !sx hint &nbsp;·&nbsp; !sx help</div>
+    <div id="commands">!sx guess &lt;word&gt; &nbsp;·&nbsp; !sx top &nbsp;·&nbsp; !sx help</div>
   </div>
 
   <script>
@@ -190,6 +217,8 @@
     const elLastMeta  = document.getElementById('last-meta');
     const elTopList   = document.getElementById('top-list');
     const elAttempts  = document.getElementById('attempt-count');
+    const elHintsSection = document.getElementById('hints-section');
+    const elHintsList = document.getElementById('hints-list');
 
     function pct(score) {
       return (score != null && isFinite(score)) ? Math.floor(score * 100) : 0;
@@ -276,6 +305,21 @@
 
       // Attempt counter
       elAttempts.textContent = `${state.attempt_count} guess${state.attempt_count !== 1 ? 'es' : ''}`;
+
+      // Hints panel
+      const hints = state.hints || [];
+      if (hints.length > 0) {
+        elHintsSection.style.display = 'flex';
+        elHintsList.innerHTML = '';
+        hints.forEach((word) => {
+          const chip = document.createElement('span');
+          chip.className = 'hint-chip';
+          chip.textContent = word;
+          elHintsList.appendChild(chip);
+        });
+      } else {
+        elHintsSection.style.display = 'none';
+      }
     }
 
     function connect() {

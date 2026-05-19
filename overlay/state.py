@@ -57,4 +57,5 @@ def serialize_game_state(gs: GameState) -> dict:
             for e in top
         ],
         "target_word": gs.target_word if gs.is_found else None,
+        "hints": gs.hints_revealed,
     }

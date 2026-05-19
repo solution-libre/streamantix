@@ -99,6 +99,45 @@ class SemanticEngine:
             return None
         return float(self._model.similarity(key_a, key_b))
 
+    def get_hints(self, word: str, n: int = 50) -> list[str]:
+        """Return up to *n* vocabulary words semantically close to *word*.
+
+        Results are sorted by descending similarity (closest first).  The
+        target word itself is excluded from the returned list.  Words are
+        returned in their cleaned form (POS-tag suffixes stripped).
+
+        Args:
+            word: The target word to find neighbours for.
+            n: Maximum number of hint words to return.
+
+        Returns:
+            A list of cleaned hint words, closest first.  Returns an empty
+            list if *word* is not in the vocabulary.
+
+        Raises:
+            RuntimeError: If the model has not been loaded yet.
+        """
+        if self._model is None:
+            raise RuntimeError("Model not loaded. Call load() first.")
+        vocab_key = self._cleaned_key_map.get(clean_word(word))
+        if vocab_key is None:
+            return []
+        # Build reverse map once: original vocab key → cleaned word.
+        reverse_map = {v: k for k, v in self._cleaned_key_map.items()}
+        # Fetch extra candidates to account for post-filtering losses.
+        candidates = self._model.most_similar(vocab_key, topn=n * 2 + 10)
+        target_cleaned = clean_word(word)
+        result: list[str] = []
+        seen: set[str] = {target_cleaned}
+        for raw_key, _ in candidates:
+            cleaned = reverse_map.get(raw_key)
+            if cleaned and cleaned not in seen:
+                seen.add(cleaned)
+                result.append(cleaned)
+                if len(result) >= n:
+                    break
+        return result
+
     def score_guess(self, guess: str, target: str) -> float | None:
         """Score a player's guess against the target word.
 

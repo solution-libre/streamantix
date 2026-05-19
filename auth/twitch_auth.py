@@ -27,7 +27,7 @@ class TokenManager:
         client_id: str,
         client_secret: str,
         redirect_uri: str = "http://localhost:4343/callback",
-        scopes: str = "chat:read chat:edit",
+        scopes: str = "chat:read chat:edit channel:read:redemptions channel:manage:redemptions",
         token_path: str = ".secrets/twitch_tokens.json",
     ) -> None:
         self.client_id = client_id

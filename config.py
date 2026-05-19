@@ -40,5 +40,13 @@ OVERLAY_PORT: int = int(os.getenv("OVERLAY_PORT", "8080"))
 TWITCH_CLIENT_ID: str | None = os.getenv("TWITCH_CLIENT_ID")
 TWITCH_CLIENT_SECRET: str | None = os.getenv("TWITCH_CLIENT_SECRET")
 TWITCH_REDIRECT_URI: str = os.getenv("TWITCH_REDIRECT_URI", "http://localhost:4343/callback")
-TWITCH_SCOPES: str = os.getenv("TWITCH_SCOPES", "chat:read chat:edit")
+TWITCH_SCOPES: str = os.getenv(
+    "TWITCH_SCOPES",
+    "chat:read chat:edit channel:read:redemptions channel:manage:redemptions",
+)
 TWITCH_TOKEN_PATH: str = os.getenv("TWITCH_TOKEN_PATH", ".secrets/twitch_tokens.json")
+
+# Channel points hint system
+HINT_REWARD_NAME: str = os.getenv("HINT_REWARD_NAME", "")
+HINTS_PER_GAME: int = int(os.getenv("HINTS_PER_GAME", "5"))
+HINT_POOL_SIZE: int = int(os.getenv("HINT_POOL_SIZE", "50"))

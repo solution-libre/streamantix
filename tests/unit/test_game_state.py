@@ -2,7 +2,7 @@
 
 import pytest
 
-from game.state import Difficulty, GameState, GuessEntry, GuessResult
+from game.state import Difficulty, GameState, GuessEntry, GuessResult, HintResult
 from tests.conftest import FakeScorer
 
 
@@ -263,4 +263,87 @@ class TestGameStateLeaderboard:
         gs.start_new_game("chat", Difficulty.EASY)
         gs.submit_guess("alice", "chat")
         assert gs.history[0].score == 1.0
+
+
+# ---------------------------------------------------------------------------
+# TestGameStateHints
+# ---------------------------------------------------------------------------
+
+
+class TestGameStateHints:
+    def test_next_hint_ok_returns_word(self):
+        gs = GameState()
+        gs.start_new_game("chat", Difficulty.EASY, hint_pool=["loin", "proche"], hints_per_game=5)
+        result, word = gs.next_hint()
+        assert result == HintResult.OK
+        assert word == "loin"
+
+    def test_next_hint_increments_counter(self):
+        gs = GameState()
+        gs.start_new_game("chat", Difficulty.EASY, hint_pool=["a", "b"], hints_per_game=5)
+        gs.next_hint()
+        assert gs.hints_given == 1
+
+    def test_next_hint_sequential(self):
+        gs = GameState()
+        gs.start_new_game("chat", Difficulty.EASY, hint_pool=["a", "b", "c"], hints_per_game=5)
+        _, w1 = gs.next_hint()
+        _, w2 = gs.next_hint()
+        assert w1 == "a"
+        assert w2 == "b"
+
+    def test_hints_revealed_accumulates(self):
+        gs = GameState()
+        gs.start_new_game("chat", Difficulty.EASY, hint_pool=["a", "b"], hints_per_game=5)
+        gs.next_hint()
+        gs.next_hint()
+        assert gs.hints_revealed == ["a", "b"]
+
+    def test_next_hint_limit_reached(self):
+        gs = GameState()
+        gs.start_new_game("chat", Difficulty.EASY, hint_pool=["a", "b", "c"], hints_per_game=2)
+        gs.next_hint()
+        gs.next_hint()
+        result, word = gs.next_hint()
+        assert result == HintResult.LIMIT_REACHED
+        assert word is None
+
+    def test_next_hint_pool_exhausted(self):
+        gs = GameState()
+        gs.start_new_game("chat", Difficulty.EASY, hint_pool=["a"], hints_per_game=5)
+        gs.next_hint()
+        result, word = gs.next_hint()
+        assert result == HintResult.POOL_EXHAUSTED
+        assert word is None
+
+    def test_next_hint_skips_guessed_words(self):
+        gs = GameState()
+        gs.start_new_game("chat", Difficulty.EASY, hint_pool=["chien", "maison"], hints_per_game=5)
+        gs.submit_guess("alice", "chien")
+        result, word = gs.next_hint()
+        assert result == HintResult.OK
+        assert word == "maison"
+
+    def test_hints_reset_on_new_game(self):
+        gs = GameState()
+        gs.start_new_game("chat", Difficulty.EASY, hint_pool=["a", "b"], hints_per_game=5)
+        gs.next_hint()
+        gs.start_new_game("maison", Difficulty.EASY)
+        assert gs.hints_given == 0
+        assert gs.hints_revealed == []
+
+    def test_hints_empty_when_no_pool(self):
+        gs = GameState()
+        gs.start_new_game("chat", Difficulty.EASY)
+        result, word = gs.next_hint()
+        assert result == HintResult.POOL_EXHAUSTED
+        assert word is None
+
+    def test_hints_revealed_is_copy(self):
+        """hints_revealed should return a copy, not the internal list."""
+        gs = GameState()
+        gs.start_new_game("chat", Difficulty.EASY, hint_pool=["a"], hints_per_game=5)
+        revealed = gs.hints_revealed
+        revealed.append("tampered")
+        assert gs.hints_revealed == []
 

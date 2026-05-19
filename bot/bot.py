@@ -7,10 +7,11 @@ import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
-from twitchio.ext import commands
+from twitchio.ext import commands, eventsub
 
+import config
 from bot.cooldown import CooldownManager
-from game.state import Difficulty, GameState
+from game.state import Difficulty, GameState, HintResult
 from game.word_utils import load_word_list
 
 _DATA_DIR = pathlib.Path(__file__).parent.parent / "data"
@@ -25,7 +26,8 @@ _HELP_TEXT = (
     "help — show this message | "
     "start [easy|medium|hard] — start a new game (broadcaster only) | "
     "guess <word> — submit a guess | "
-    "hint — show top 10 guesses | "
+    "hint — reveal next semantic hint (broadcaster only) | "
+    "top — show top 10 guesses | "
     "status — show current game status | "
     "solution — reveal the answer (broadcaster only) | "
     "setprefix <prefix> — change prefix (mod/broadcaster) | "
@@ -89,11 +91,15 @@ class StreamantixBot(commands.Bot):
             "on_state_change", None
         )
         scorer = kwargs.pop("scorer", None)  # type: ignore[assignment]
+        self._token: str = str(kwargs.get("token", ""))
         self._command_prefix: str = initial_prefix
         self._cooldown = CooldownManager(int(initial_cooldown))
         self._game_state = GameState(scorer=scorer)  # type: ignore[arg-type]
+        self._scorer = scorer
         self._on_state_change = on_state_change
         self._next_difficulty: Difficulty = Difficulty.EASY
+        self._eventsub: eventsub.EventSubWSClient | None = None
+        self._channel_id: int | None = None
         super().__init__(prefix=lambda bot, msg: bot._command_prefix, **kwargs)
 
     async def _notify_overlay(self) -> None:
@@ -108,10 +114,105 @@ class StreamantixBot(commands.Bot):
     async def event_ready(self) -> None:
         """Called once the bot has successfully connected to Twitch."""
         print(f"Logged in as {self.nick}")
+        if config.HINT_REWARD_NAME:
+            await self._setup_eventsub()
+        else:
+            print("Hint system disabled (HINT_REWARD_NAME not set).")
+
+    async def _setup_eventsub(self) -> None:
+        """Subscribe to channel points redemption events via EventSub WebSocket."""
+        try:
+            users = await self.fetch_users(names=[config.TWITCH_CHANNEL])
+        except Exception as e:
+            print(f"Warning: Could not resolve channel ID for '{config.TWITCH_CHANNEL}': {e}")
+            return
+
+        if not users:
+            print(f"Warning: Channel '{config.TWITCH_CHANNEL}' not found. Hint system disabled.")
+            return
+
+        self._channel_id = users[0].id
+        self._eventsub = eventsub.EventSubWSClient(self)
+        try:
+            await self._eventsub.subscribe_channel_points_redeemed(
+                broadcaster=self._channel_id,
+                token=self._token,
+            )
+            print(
+                f"Subscribed to channel points redemptions for '{config.TWITCH_CHANNEL}' "
+                f"(reward: '{config.HINT_REWARD_NAME}')."
+            )
+        except Exception as e:
+            print(
+                f"Warning: Could not subscribe to channel points events: {e}. "
+                "Ensure 'channel:read:redemptions' scope is granted and re-run auth-login."
+            )
 
     async def event_error(self, error: Exception, data: str | None = None) -> None:
         """Called when an error occurs; logs it without crashing the bot."""
         print(f"Error: {error}")
+
+    async def event_eventsub_notification_channel_reward_redeem(
+        self, payload: eventsub.NotificationEvent
+    ) -> None:
+        """Handle a channel points redemption event from EventSub."""
+        data: eventsub.CustomRewardRedemptionAddUpdateData = payload.data
+        if data.reward.title.strip().lower() != config.HINT_REWARD_NAME.strip().lower():
+            return
+        await self._handle_hint_redemption(data)
+
+    async def _handle_hint_redemption(
+        self, data: eventsub.CustomRewardRedemptionAddUpdateData
+    ) -> None:
+        """Process a hint redemption: reveal next hint or refund on failure."""
+        channel = self.get_channel(config.TWITCH_CHANNEL)
+        if channel is None:
+            return
+
+        username = data.user.name
+
+        if self._game_state.target_word is None:
+            await channel.send(
+                f"@{username} No game is currently in progress. Redemption refunded."
+            )
+            await self._cancel_redemption(data)
+            return
+
+        result, word = self._game_state.next_hint()
+
+        if result == HintResult.OK:
+            n = self._game_state.hints_given
+            max_n = config.HINTS_PER_GAME
+            await channel.send(f'@{username} A hint: "{word}" (hint {n}/{max_n})')
+            await self._notify_overlay()
+        elif result == HintResult.LIMIT_REACHED:
+            await channel.send(
+                f"@{username} The hint limit has been reached "
+                f"({config.HINTS_PER_GAME}/{config.HINTS_PER_GAME}). Redemption refunded."
+            )
+            await self._cancel_redemption(data)
+        elif result == HintResult.POOL_EXHAUSTED:
+            await channel.send(
+                f"@{username} No more hints available for this game. Redemption refunded."
+            )
+            await self._cancel_redemption(data)
+
+    async def _cancel_redemption(
+        self, data: eventsub.CustomRewardRedemptionAddUpdateData
+    ) -> None:
+        """Cancel (refund) a channel points redemption via the Helix API."""
+        if self._channel_id is None or not self._token:
+            return
+        try:
+            await self._http.update_reward_redemption_status(
+                self._token,
+                self._channel_id,
+                data.id,
+                data.reward.id,
+                False,
+            )
+        except Exception as e:
+            print(f"Warning: Could not cancel redemption {data.id}: {e}")
 
     @commands.command()
     async def help(self, ctx: commands.Context) -> None:
@@ -165,7 +266,17 @@ class StreamantixBot(commands.Bot):
                 return
 
         target = random.choice(words)
-        self._game_state.start_new_game(target, diff)
+
+        hint_pool: list[str] = []
+        if self._scorer is not None and hasattr(self._scorer, "get_hints"):
+            raw_pool: list[str] = self._scorer.get_hints(  # type: ignore[attr-defined]
+                target, n=config.HINT_POOL_SIZE
+            )
+            hint_pool = list(reversed(raw_pool))
+
+        self._game_state.start_new_game(
+            target, diff, hint_pool=hint_pool, hints_per_game=config.HINTS_PER_GAME
+        )
         await ctx.send(
             f"A new {diff.value} game has started! "
             f"Guess the secret word using '{self._command_prefix} guess <word>'."
@@ -296,10 +407,10 @@ class StreamantixBot(commands.Bot):
         await ctx.send(f"Cooldown set to {value} seconds (session only).")
 
     @commands.command()
-    async def hint(self, ctx: commands.Context) -> None:
+    async def top(self, ctx: commands.Context) -> None:
         """Show the top 10 best guesses so far (proximity leaderboard).
 
-        Usage: <prefix> hint
+        Usage: <prefix> top
         """
         if self._game_state.target_word is None:
             await ctx.send("No game is currently in progress.")
@@ -315,6 +426,36 @@ class StreamantixBot(commands.Bot):
             for i, e in enumerate(top)
         ]
         await ctx.send("Top guesses: " + " | ".join(parts))
+
+    @commands.command()
+    async def hint(self, ctx: commands.Context) -> None:
+        """Reveal the next semantic hint from the pool (broadcaster only).
+
+        Usage: <prefix> hint
+
+        Triggers the next hint without requiring a channel points redemption.
+        """
+        if not ctx.author.is_broadcaster:
+            await ctx.send("Only the broadcaster can trigger a hint.")
+            return
+
+        if self._game_state.target_word is None:
+            await ctx.send("No game is currently in progress.")
+            return
+
+        result, word = self._game_state.next_hint()
+
+        if result == HintResult.OK:
+            n = self._game_state.hints_given
+            max_n = config.HINTS_PER_GAME
+            await ctx.send(f'Hint: "{word}" (hint {n}/{max_n})')
+            await self._notify_overlay()
+        elif result == HintResult.LIMIT_REACHED:
+            await ctx.send(
+                f"Hint limit reached ({config.HINTS_PER_GAME}/{config.HINTS_PER_GAME})."
+            )
+        elif result == HintResult.POOL_EXHAUSTED:
+            await ctx.send("No more hints available in the pool.")
 
     @commands.command()
     async def status(self, ctx: commands.Context) -> None:

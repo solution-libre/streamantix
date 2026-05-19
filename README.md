@@ -43,6 +43,9 @@ Players guess a secret word by submitting words in chat. The bot uses word embed
    | `MODEL_PATH` | Path to the Word2Vec binary model file | `models/frWac_no_postag_no_phrase_700_skip_cut50.bin` |
    | `OVERLAY_ENABLED` | Start the web overlay server | `false` |
    | `OVERLAY_PORT` | TCP port for the overlay server | `8080` |
+   | `HINT_REWARD_NAME` | Exact name of the Twitch channel points reward for hints (leave empty to disable) | `""` |
+   | `HINTS_PER_GAME` | Maximum number of hints that can be revealed per game | `5` |
+   | `HINT_POOL_SIZE` | Number of Word2Vec neighbors pre-computed as hint candidates | `50` |
 
 ## Twitch Authentication
 
@@ -163,7 +166,8 @@ All commands are prefixed with the configured `COMMAND_PREFIX` (default: `!sx`).
 | `!sx help` | Anyone | Show available commands |
 | `!sx start [easy\|medium\|hard]` | Broadcaster only | Start a new game round. Defaults to the difficulty set with `setdifficulty` (initially `easy`) |
 | `!sx guess <word>` | Anyone | Submit a guess for the current game |
-| `!sx hint` | Anyone | Show the top 10 best guesses so far (proximity leaderboard) |
+| `!sx hint` | Broadcaster only | Manually reveal the next semantic hint from the pool (bypasses channel points) |
+| `!sx top` | Anyone | Show the top 10 best guesses so far (proximity leaderboard) |
 | `!sx status` | Anyone | Show current game status: attempts, best guess, and whether the word has been found |
 | `!sx setprefix <prefix>` | Mod / Broadcaster | Change the command prefix (session only) |
 | `!sx setcooldown <seconds>` | Mod / Broadcaster | Change the guess cooldown duration (session only) |
@@ -176,12 +180,98 @@ All commands are prefixed with the configured `COMMAND_PREFIX` (default: `!sx`).
 !sx start
 !sx start hard
 !sx guess maison
+!sx top
 !sx hint
 !sx status
 !sx setprefix ?sx
 !sx setcooldown 10
 !sx setdifficulty hard
 ```
+
+## Channel Points Hint System
+
+Streamantix supports an optional **semantic hint system** powered by Twitch Channel Points. When enabled, viewers can redeem a custom reward to reveal progressively closer words from the Word2Vec neighbor pool.
+
+### How it works
+
+1. **At game start**, the bot pre-computes a pool of Word2Vec neighbors of the target word (default: 50 words)
+2. **Hints are revealed from farthest to closest**: hint 1 is moderately related, hint 5 is very close
+3. **Viewers redeem a custom reward** you create in your Twitch dashboard (e.g., "Streamantix Hint")
+4. **The bot posts the next hint in chat** and displays it persistently in the overlay
+5. **Redemptions are automatically refunded** when:
+   - No game is currently running
+   - The hint limit has been reached (default: 5 hints per game)
+   - The hint pool is exhausted (all pool words have been guessed by players)
+
+### Setup
+
+#### 1. Create a Twitch Channel Points reward
+
+1. Go to your **Twitch Creator Dashboard** → **Viewer Rewards** → **Channel Points**
+2. Click **Add New Custom Reward**
+3. Configure the reward:
+   - **Title**: Choose a name (e.g., `Streamantix Hint` or `Indice Sémantique`)
+   - **Cost**: Set the channel points cost (recommended: 500-2000 points)
+   - **User Input**: Set to **Disabled** (the bot does not use text input)
+   - **Cooldown** (optional): Add a global cooldown between redemptions if desired
+4. Click **Save**
+
+#### 2. Update your `.env` file
+
+Set `HINT_REWARD_NAME` to the **exact name** of the reward you just created (case-insensitive, but must match):
+
+```env
+HINT_REWARD_NAME=Streamantix Hint
+```
+
+Optional: Adjust the hint limits if desired:
+
+```env
+HINTS_PER_GAME=5        # Max hints per game (default: 5)
+HINT_POOL_SIZE=50       # Number of neighbors pre-computed (default: 50)
+```
+
+#### 3. Grant required OAuth scopes
+
+The hint system requires two additional Twitch OAuth scopes:
+
+- `channel:read:redemptions` — to receive channel points redemption events
+- `channel:manage:redemptions` — to cancel (refund) redemptions when the limit is reached
+
+**If you're using the OAuth flow**, these scopes are included by default. Run the login command to re-authorize:
+
+```bash
+poetry run python main.py auth-login
+```
+
+**If you're using a manual token** (`TWITCH_TOKEN`), generate a new token with these scopes:
+<https://twitchtokengenerator.com/> (select **Custom Scopes** → `chat:read`, `chat:edit`, `channel:read:redemptions`, `channel:manage:redemptions`)
+
+#### 4. Start the bot
+
+```bash
+poetry run python main.py
+```
+
+On startup, the bot will:
+
+- Subscribe to channel points redemption events via EventSub WebSocket
+- Log confirmation: `Subscribed to channel points redemptions for '<channel>' (reward: '<reward_name>')`
+- If `HINT_REWARD_NAME` is empty or unset, the hint system is disabled (no error)
+
+### Broadcaster manual hints
+
+The broadcaster can trigger hints manually without spending channel points using:
+
+```text
+!sx hint
+```
+
+This is useful for:
+
+- Testing the hint system before going live
+- Providing free hints during special events
+- Recovering from technical issues mid-stream
 
 ## Testing
 

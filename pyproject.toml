@@ -26,6 +26,13 @@ httpx = "^0.28"
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "--cov=bot --cov=game --cov=overlay --cov=auth --cov-report=term-missing"
+# Filter TwitchIO's internal deprecation warning that we cannot fix:
+# twitchio/ext/eventsub/__init__.py imports EventSubClient (HTTP server) even when
+# we only use EventSubWSClient (WebSocket client). The server's inheritance from
+# web.Application is deprecated in aiohttp but we don't use it.
+filterwarnings = [
+    "ignore::DeprecationWarning:twitchio.ext.eventsub.server",
+]
 
 [tool.coverage.run]
 source = ["bot", "game", "overlay", "auth"]
